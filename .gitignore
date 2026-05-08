@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Captured videos / generated media
+captures/
+*.mkv
+*.mp4
+*.avi
+*.mov
+
+# Local env / editor junk
+.env
+.venv/
+venv/
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
