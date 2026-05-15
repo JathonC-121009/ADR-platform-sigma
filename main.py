@@ -8,19 +8,19 @@ from flask_streaming import FlaskCameraServer
 CAMERA_CONFIGS = [
     {
         "name": "camera0",
-        "device": "/dev/video0",
+        "device": "/dev/video0", # Change to /dev/video2 if your camera mounts there
         "width": 1280,
         "height": 720,
         "fps": 60,
     },
-    # To add another camera, duplicate this block and change name/device:
-    {
-        "name": "camera1",
-        "device": "/dev/video2",
-        "width": 1280,
-        "height": 720,
-        "fps": 60,
-    },
+    # COMMENT THIS OUT FOR NOW
+    # {
+    #     "name": "camera1",
+    #     "device": "/dev/video2",
+    #     "width": 1280,
+    #     "height": 720,
+    #     "fps": 60,
+    # },
 ]
 
 camera_apps = [create_camera_app(config) for config in CAMERA_CONFIGS]
