@@ -1,15 +1,20 @@
 import cv2
+import json
+import socket
+import time
+from pathlib import Path
+
 import numpy as np
 import yaml
-import time
-from gstreamer_class import CameraStream
-import socket
-import json
+
+from .gstreamer_class import CameraStream
 # ==========================================
 # --- CONFIGURATION TOGGLES ---
 # ==========================================
 USE_VIDEO_FILE = True  # True: Use MKV video file | False: Use Live Camera
-VIDEO_FILE_PATH = "F3video1_Flipped.mkv"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ASSETS_DIR = PROJECT_ROOT / "assets"
+VIDEO_FILE_PATH = PROJECT_ROOT / "F3video1_Flipped.mkv"
 FLIP_CAMERA = False      # Set to True if the physical camera is mounted upside down
 # ==========================================
 
@@ -123,12 +128,12 @@ class OpenCVProcessing():
     def __init__(self, cam: CameraStream):
         self.cam = cam
         
-        self.MODEL_PATH = "best.hef" 
+        self.MODEL_PATH = ASSETS_DIR / "best.hef"
         
         if USE_VIDEO_FILE:
-            self.CALIB_PATH = "tevs_CAM1_fisheye_calibration.yaml"
+            self.CALIB_PATH = ASSETS_DIR / "tevs_CAM1_fisheye_calibration.yaml"
         else:
-            self.CALIB_PATH = "tevs_CAM2_fisheye_calibration.yaml"
+            self.CALIB_PATH = ASSETS_DIR / "tevs_CAM2_fisheye_calibration.yaml"
         
         self.HALF_SIZE = 0.97155 / 2.0
         self.GATE_3D_CORNERS = np.array([
@@ -142,13 +147,13 @@ class OpenCVProcessing():
         self.UPPER_ORANGE = np.array([30, 255, 255])
 
         print(f"[INFO] Loading Camera Calibration: {self.CALIB_PATH}")
-        with open(self.CALIB_PATH, 'r') as f:
+        with open(self.CALIB_PATH, "r", encoding="utf-8") as f:
             calib = yaml.safe_load(f)
         self.K = np.array(calib['camera_matrix'], dtype=np.float64)
         self.D = np.array(calib['dist_coeffs'], dtype=np.float64)
 
         print("[INFO] Loading Hailo-10H Hardware Model...")
-        self.model = HailoYOLO(self.MODEL_PATH)
+        self.model = HailoYOLO(str(self.MODEL_PATH))
 
         # --- SETUP UDP TELEMETRY PUBLISHER ---
         self.udp_ip = "127.0.0.1"  # Localhost
@@ -207,7 +212,7 @@ class OpenCVProcessing():
         
         if USE_VIDEO_FILE:
             print(f"[INFO] Using Video File Mode: {VIDEO_FILE_PATH}")
-            cap = cv2.VideoCapture(VIDEO_FILE_PATH)
+            cap = cv2.VideoCapture(str(VIDEO_FILE_PATH))
         else:
             print("[INFO] Using Live Camera Mode")
 
