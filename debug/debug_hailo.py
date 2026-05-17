@@ -1,12 +1,18 @@
 import numpy as np
+from pathlib import Path
+
 from hailo_platform import VDevice, FormatType
 
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ASSETS_DIR = PROJECT_ROOT / "assets"
+
 def main():
-    hef_path = "best.hef"
+    hef_path = ASSETS_DIR / "best.hef"
     print(f"Loading {hef_path} into VDevice...")
     
     vdevice = VDevice()
-    infer_model = vdevice.create_infer_model(hef_path)
+    infer_model = vdevice.create_infer_model(str(hef_path))
     infer_model.set_batch_size(1)
 
     print("\n=== MODEL INPUTS ===")
