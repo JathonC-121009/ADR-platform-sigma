@@ -1,115 +1,180 @@
+# ADR Platform
 
-***
+ADR Platform is experimental edge software for autonomous drone racing. It
+combines Hailo-accelerated gate detection, fisheye-camera pose estimation,
+browser-viewable video, UDP telemetry, and MAVLink mission control on a
+Raspberry Pi 5.
 
-# 🚀 Autonomous Drone Racing Gate Detection (Edge Deployment)
+> [!CAUTION]
+> This is research software, not a safety-certified flight system. The mission
+> code can send movement and landing commands to an aircraft. Develop against
+> simulation first, test without propellers, keep a manual failsafe available,
+> and follow local aviation and radio-control rules.
 
-This repository contains the edge-deployment software for a real-time, 60 FPS 3D gate detection pipeline designed for autonomous racing drones. 
+## System overview
 
-It utilizes a custom YOLOv8 model quantized for the **Raspberry Pi AI HAT+ 2 (Hailo-10H)**, followed by highly optimized OpenCV sub-pixel math and `solvePnP` 3D kinematics to output a live telemetry matrix (Distance, X, Y, Z, Roll, Pitch, Yaw) for the drone's flight controller.
+```text
+V4L2 camera or video
+        |
+        v
+GStreamer + OpenCV --> Hailo-10H YOLO --> gate pose + web stream
+                                             |
+                                      UDP 127.0.0.1:5050
+                                             |
+                                             v
+                                  navigation mission controller
+                                             |
+                                  MAVLink local-NED commands
+```
 
-## 📦 Included Files
-Ensure your project directory contains the following folders before proceeding:
-* `assets/` *(Compiled model and calibration YAMLs)*
-* `vision/` *(Camera, OpenCV, and Flask streaming modules)*
-* `navigation/` *(Navigation controller and mission classes)*
-* `scripts/` *(Runnable entry points and helper scripts)*
-* `debug/` *(One-off diagnostics and telemetry readers)*
-* `requirements.txt` *(Python dependencies)*
+The vision pipeline detects up to three gates, refines their image corners,
+estimates 3D pose with `solvePnP`, and publishes rows in this format:
 
----
+```text
+[distance, forward, right, down, roll, pitch, yaw]
+```
 
-## 🛠️ Step 1: Install AI Hardware Drivers
-This system assumes you are running a **Raspberry Pi 5** with the **Raspberry Pi AI HAT+ 2 (Hailo-10H chip)**. 
+Positions are in metres, angles are in degrees, and `999.0` marks a missing
+detection.
 
-Open a terminal on your Pi (or SSH into it) and run the following commands to install the PCIe drivers and HailoRT software:
+## Repository layout
+
+- `assets/` — compiled Hailo model and camera calibrations
+- `vision/` — capture, inference, pose estimation, telemetry, and Flask streams
+- `navigation/` — current modular MAVLink controller and mission framework
+- `scripts/` — supported entry points and recording helper
+- `debug/` — Hailo and UDP telemetry diagnostics
+- Top-level `navigation*.py` files — legacy prototypes retained for reference
+
+## Hardware and software
+
+The current configuration targets:
+
+- Raspberry Pi 5 running 64-bit Raspberry Pi OS
+- Raspberry Pi AI HAT+ 2 with a Hailo-10H accelerator
+- A V4L2 camera capable of 1280×720 MJPEG at 60 FPS
+- A MAVLink-compatible autopilot or simulator
+- Python 3.10 or newer
+
+## Installation
+
+Install the Hailo-10H runtime using the current
+[Raspberry Pi AI software instructions](https://www.raspberrypi.com/documentation/computers/ai.html):
 
 ```bash
 sudo apt update
-sudo apt install raspberrypi-kernel-headers -y
-sudo apt install hailo-h10-all h10-hailort-pcie-driver python3-h10-hailort -y
-```
-
-Add your user to the Hailo hardware group so Python can access the AI chip without `sudo`, then reboot the Pi:
-```bash
-sudo usermod -aG hailo $USER
+sudo apt install dkms hailo-h10-all
 sudo reboot
 ```
 
----
-
-## 📂 Step 2: Transfer Files to the Pi
-If the files are currently on your laptop, you need to copy them to the Raspberry Pi.
-Open **Windows PowerShell** (or your Mac/Linux terminal) in the folder containing your files and run:
-
-```powershell
-# Replace <PI_IP_ADDRESS> and <PI_USERNAME> with your actual Pi info
-ssh <PI_USERNAME>@<PI_IP_ADDRESS> "mkdir -p ~/drone_vision"
-    scp -r * <PI_USERNAME>@<PI_IP_ADDRESS>:~/drone_vision/
-```
-
----
-
-## 🐍 Step 3: Setup Python Environment
-SSH back into your Raspberry Pi. We need to create a Python Virtual Environment. 
-
-**⚠️ CRITICAL:** You *must* use the `--system-site-packages` flag. If you don't, your virtual environment will not be able to see the Hailo-10H drivers we installed in Step 1!
+After rebooting, verify the accelerator:
 
 ```bash
-cd ~/drone_vision
-
-# Create virtual environment with system packages enabled
-python3 -m venv camvenv --system-site-packages
-
-# Activate the environment
-source camvenv/bin/activate
-
-# Install required Python libraries
-pip install -r requirements.txt
+hailortcli fw-control identify
 ```
 
----
-
-## ⚙️ Step 4: Verify Configuration
-Before running, open `vision/opencv_processing.py` and ensure the configuration toggles at the very top of the file match your setup:
-
-```python
-# ==========================================
-# --- CONFIGURATION TOGGLES ---
-# ==========================================
-USE_VIDEO_FILE = False  # Set to False to use the live hardware camera
-VIDEO_FILE_PATH = "F3video1_Flipped.mkv" # Ignored if USE_VIDEO_FILE is False
-FLIP_CAMERA = True      # Set to True if your camera is mounted upside down on the drone
-# ==========================================
-```
-
----
-
-## ▶️ Step 5: Run the Vision System
-With the virtual environment activated, simply run the main script:
+Install the remaining system dependencies:
 
 ```bash
-# Ensure you are in the directory and the venv is active
-cd ~/drone_vision
-source camvenv/bin/activate
+sudo apt install \
+  python3-venv \
+  python3-gi \
+  gir1.2-gstreamer-1.0 \
+  gstreamer1.0-tools \
+  gstreamer1.0-plugins-base \
+  gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad \
+  gstreamer1.0-plugins-ugly
+```
 
-# Run the app
+Clone the project and create a virtual environment that can access the
+system-installed Hailo and GStreamer Python bindings:
+
+```bash
+git clone https://github.com/ctrl-alt-delete101/ADR-platform.git
+cd ADR-platform
+git switch 5_15_2026_Gate_Detection
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+## Configuration
+
+Review these values before running anything:
+
+1. In `scripts/run_vision.py`, set the camera device, resolution, and frame
+   rate in `CAMERA_CONFIGS`.
+2. In `vision/opencv_processing.py`, set `USE_VIDEO_FILE`,
+   `VIDEO_FILE_PATH`, and `FLIP_CAMERA`. Live-camera mode is the default.
+3. Confirm that the selected calibration YAML matches the physical camera.
+4. In `navigation/navigation.py`, verify `MAVLINK_CONN`, camera offsets,
+   controller gains, speed limits, tolerances, and timeouts for your vehicle.
+
+The included calibration files are hardware-specific and should not be assumed
+to fit another camera, lens, resolution, or mounting arrangement.
+
+## Running the vision pipeline
+
+Start vision and telemetry:
+
+```bash
 python -m scripts.run_vision
 ```
 
-You should see terminal output confirming the camera calibration loaded, the Hailo-10H model initialized, and the Flask server starting.
+Open `http://localhost:5000` on the Raspberry Pi. The Flask development server
+listens on all interfaces and has no authentication or TLS. Do not expose it
+directly to the public internet.
 
----
+To inspect telemetry without connecting an autopilot:
 
-## 📺 Step 6: View the Live Telemetry Feed
-To view the real-time AI processing, open a web browser on your laptop (must be on the same WiFi network as the Pi) and navigate to:
+```bash
+python -m debug.telemetry_reader
+```
 
-**`http://<PI_IP_ADDRESS>:5000`**
+To record camera input:
 
-### Understanding the HUD (Heads-Up Display)
-On the live stream, you will see the detected gates and an overlay matrix in the top left corner:
-* **Green Rows:** An active, 3D-tracked gate.
-* **Red Rows:** Empty padding rows (displays `999.00`).
-* **Format:** `[Distance, X(Fwd), Y(Rgt), Z(Dwn), Roll, Pitch, Yaw]`
-* **Units:** Meters and Degrees.
+```bash
+./scripts/record.sh 0
+```
 
-*Note: The kinematics are pre-mapped to the standard Drone FRD (Forward-Right-Down) coordinate frame.*
+Recordings are written to `captures/`, which is ignored by Git.
+
+## Running a mission
+
+Only proceed after validating the vision output, coordinate frames, calibration,
+offsets, and MAVLink connection in a simulator:
+
+```bash
+python -m scripts.multi_stage_gate_mission
+```
+
+The mission approaches each detected gate at staged distances and then commands
+a pass-through target. Treat the default controller values as development
+examples, not safe settings for an arbitrary vehicle.
+
+## Model and calibration provenance
+
+The compiled model and calibration files need separate provenance and
+redistribution review; see [assets/README.md](assets/README.md). They are not
+automatically covered by the source-code license.
+
+## Development
+
+Run the hardware-independent checks:
+
+```bash
+python -m unittest discover -s tests -v
+python -m compileall -q debug navigation scripts vision
+bash -n scripts/record.sh
+```
+
+Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Report
+security issues privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+Unless otherwise noted, the source code is available under the
+[MIT License](LICENSE). Third-party dependencies and repository assets retain
+their own licensing terms.
