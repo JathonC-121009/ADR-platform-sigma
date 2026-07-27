@@ -5,45 +5,45 @@ Thanks for helping improve ADR Platform.
 ## Before opening an issue
 
 - Search existing issues for the same symptom or proposal.
-- For camera problems, verify the device path and supported modes with
-  `v4l2-ctl --list-formats-ext -d /dev/videoN` when `v4l2-ctl` is available.
-- Remove credentials, private network details, recorded video, and other
-  sensitive data from logs and attachments.
+- Reproduce flight-control problems in simulation whenever possible.
+- Remove credentials, private network details, recorded video, vehicle
+  identifiers, and other sensitive data from logs and attachments.
+- Use GitHub's private vulnerability-reporting flow instead of a public issue
+  for security problems; see [SECURITY.md](SECURITY.md).
 
-Bug reports should include:
-
-- Operating system and hardware
-- Python, GStreamer, and OpenCV versions
-- Camera model and V4L2 device path
-- The configured resolution and frame rate
-- Minimal reproduction steps and the complete error message
-
-Use GitHub's private vulnerability-reporting flow instead of a public issue
-for security problems; see [SECURITY.md](SECURITY.md).
+Bug reports should include the operating system, Python and HailoRT versions,
+camera and accelerator hardware, calibration used, MAVLink simulator or
+autopilot, relevant configuration, reproduction steps, and complete errors.
 
 ## Development setup
 
-Follow the installation instructions in [README.md](README.md), then run:
+Follow [README.md](README.md), then run:
 
 ```bash
 python -m unittest discover -s tests -v
-python -m py_compile \
-  camera_app.py \
-  flask_streaming.py \
-  gstreamer_class.py \
-  main.py \
-  opencv_processing.py
+python -m compileall -q debug navigation scripts vision
+bash -n scripts/record.sh
 ```
 
-The unit tests do not require camera hardware. Please also test camera or
-pipeline changes on relevant hardware when possible and describe that testing
-in the pull request.
+The unit tests do not require an accelerator, camera, or autopilot. Changes to
+vision or navigation behavior should also be tested on appropriate hardware or
+in simulation, and that validation should be described in the pull request.
 
 ## Pull requests
 
-Keep each pull request focused on one change. Explain the motivation, note any
-hardware assumptions, add or update tests where practical, and update the
-documentation when behavior or setup changes.
+Keep each pull request focused on one change. Explain the motivation and safety
+impact, document hardware assumptions, add or update tests where practical, and
+update the documentation when behavior or setup changes.
 
-By contributing, you agree that your contribution may be distributed under
-the repository's MIT License and that you have the right to submit it.
+Do not add recordings, datasets, model weights, compiled models, or calibration
+data unless the pull request documents:
+
+- Who created the asset and who owns it
+- The source dataset and upstream model or checkpoint
+- The license and redistribution terms for every input and output
+- The target hardware and toolchain used to produce compiled artifacts
+- A checksum for the exact file
+
+By contributing, you agree that your source-code contribution may be
+distributed under the repository's MIT License and that you have the right to
+submit it. Assets are accepted only under separately documented terms.

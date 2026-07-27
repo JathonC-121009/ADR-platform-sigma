@@ -1,7 +1,19 @@
+import importlib.util
 import unittest
 from dataclasses import dataclass
+from pathlib import Path
 
-from flask_streaming import FlaskCameraServer
+
+MODULE_PATH = (
+    Path(__file__).resolve().parents[1] / "vision" / "flask_streaming.py"
+)
+SPEC = importlib.util.spec_from_file_location(
+    "flask_streaming_under_test",
+    MODULE_PATH,
+)
+flask_streaming = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(flask_streaming)
+FlaskCameraServer = flask_streaming.FlaskCameraServer
 
 
 class DummyCamera:

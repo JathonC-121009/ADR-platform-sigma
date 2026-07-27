@@ -18,7 +18,7 @@ body:
     validations:
       required: true
   - type: textarea
-    id: alternatives
+    id: safety
     attributes:
-      label: Alternatives and hardware constraints
-      description: Note alternatives considered and any relevant platform or hardware assumptions.
+      label: Alternatives, hardware, and safety
+      description: Note alternatives considered, hardware assumptions, and possible flight-safety effects.

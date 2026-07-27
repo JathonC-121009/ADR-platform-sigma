@@ -1,5 +1,7 @@
-# PyGObject/GStreamer is installed through the operating system packages
-# documented in README.md.
+# HailoRT/PyHailoRT and PyGObject/GStreamer are installed through the
+# operating-system packages documented in README.md.
 Flask>=2.0,<4.0
 numpy>=1.26,<3.0
 opencv-python-headless>=4.10,<5.0
+pymavlink>=2.4,<3.0
+PyYAML>=6.0,<7.0

@@ -1,14 +1,16 @@
 ## Summary
 
-Describe what changed and why.
+Describe what changed, why, and any effect on flight safety.
 
 ## Validation
 
 - [ ] Hardware-independent tests pass
-- [ ] Relevant camera or drone hardware was tested, or hardware testing is not applicable
+- [ ] Relevant simulation or hardware testing was completed, or is not applicable
 - [ ] Documentation was updated for user-visible changes
-- [ ] No credentials, recordings, private network details, or unlicensed assets were added
+- [ ] No credentials, recordings, vehicle identifiers, or private network details were added
+- [ ] New models, datasets, and calibration assets have documented provenance and redistribution rights
 
-## Hardware notes
+## Hardware and safety notes
 
-List the operating system, camera, accelerator, or other hardware assumptions.
+List the operating system, camera, accelerator, autopilot or simulator, and
+any assumptions or remaining risks.

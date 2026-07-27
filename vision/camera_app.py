@@ -1,8 +1,8 @@
 import threading
 from dataclasses import dataclass
 
-from gstreamer_class import CameraStream
-from opencv_processing import OpenCVProcessing
+from .gstreamer_class import CameraStream
+from .opencv_processing import OpenCVProcessing
 
 
 @dataclass
