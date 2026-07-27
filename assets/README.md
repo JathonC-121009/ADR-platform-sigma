@@ -4,20 +4,15 @@ The repository's MIT License covers source code unless otherwise noted. It
 does not automatically grant rights to models, datasets, calibration outputs,
 or other separately copyrightable assets.
 
-## `best.hef`
+## Locally supplied `best.hef`
 
-- Format: compiled Hailo executable
-- Target: Hailo-10H
-- SHA-256:
-  `1f2601ee94f7162277a20ce673212c4070bc4f230073f230b4f019736200bd0a`
-- Training-data provenance: not yet documented
-- Upstream checkpoint and license: not yet documented
-- Compiler/toolchain version and terms: not yet documented
-- Redistribution permission: not yet confirmed
+The application expects a Hailo-10H executable at `assets/best.hef`, but that
+file is intentionally excluded by `.gitignore` and is not distributed with the
+repository.
 
-Do not publish or redistribute this file until the maintainers have documented
-the complete provenance and confirmed that every relevant license permits
-redistribution of the compiled artifact.
+Users must supply their own model and confirm that its training data, upstream
+checkpoint, compiler toolchain, and resulting artifact permit their intended
+use. Do not commit or redistribute the model through this repository.
 
 ## Camera calibration files
 

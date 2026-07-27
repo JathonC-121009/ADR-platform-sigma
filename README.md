@@ -39,7 +39,7 @@ detection.
 
 ## Repository layout
 
-- `assets/` — compiled Hailo model and camera calibrations
+- `assets/` — model documentation and camera calibrations
 - `vision/` — capture, inference, pose estimation, telemetry, and Flask streams
 - `navigation/` — current modular MAVLink controller and mission framework
 - `scripts/` — supported entry points and recording helper
@@ -106,10 +106,12 @@ Review these values before running anything:
 
 1. In `scripts/run_vision.py`, set the camera device, resolution, and frame
    rate in `CAMERA_CONFIGS`.
-2. In `vision/opencv_processing.py`, set `USE_VIDEO_FILE`,
+2. Supply a Hailo-10H model at `assets/best.hef`. This local model is ignored
+   by Git and is not distributed with the repository.
+3. In `vision/opencv_processing.py`, set `USE_VIDEO_FILE`,
    `VIDEO_FILE_PATH`, and `FLIP_CAMERA`. Live-camera mode is the default.
-3. Confirm that the selected calibration YAML matches the physical camera.
-4. In `navigation/navigation.py`, verify `MAVLINK_CONN`, camera offsets,
+4. Confirm that the selected calibration YAML matches the physical camera.
+5. In `navigation/navigation.py`, verify `MAVLINK_CONN`, camera offsets,
    controller gains, speed limits, tolerances, and timeouts for your vehicle.
 
 The included calibration files are hardware-specific and should not be assumed
@@ -156,9 +158,11 @@ examples, not safe settings for an arbitrary vehicle.
 
 ## Model and calibration provenance
 
-The compiled model and calibration files need separate provenance and
-redistribution review; see [assets/README.md](assets/README.md). They are not
-automatically covered by the source-code license.
+The compiled model is intentionally excluded from the repository. Users must
+supply a model they are licensed to use. The calibration files need separate
+provenance and redistribution review; see
+[assets/README.md](assets/README.md). Assets are not automatically covered by
+the source-code license.
 
 ## Development
 

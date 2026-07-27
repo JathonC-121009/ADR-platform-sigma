@@ -18,6 +18,9 @@ captures/
 *.avi
 *.mov
 
+# Locally supplied model artifacts
+/assets/best.hef
+
 # Local env / editor junk
 .env
 .env.*
