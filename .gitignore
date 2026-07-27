@@ -2,6 +2,14 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
 
 # Captured videos / generated media
 captures/
@@ -10,8 +18,13 @@ captures/
 *.avi
 *.mov
 
+# Locally supplied model artifacts
+/assets/best.hef
+
 # Local env / editor junk
 .env
+.env.*
+!.env.example
 .venv/
 venv/
 .vscode/
@@ -20,4 +33,3 @@ venv/
 # OS junk
 .DS_Store
 Thumbs.db
-__pycache__/
