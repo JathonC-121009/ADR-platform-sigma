@@ -149,10 +149,13 @@ offsets, and MAVLink connection in a simulator:
 
 ```bash
 python -m scripts.multi_stage_gate_mission
+python -m scripts.single_gate_mission
 ```
 
 The mission approaches each detected gate at staged distances and then commands
-a pass-through target. Treat the default controller values as development
+a pass-through target. The single-gate mission instead takes 0.25 m
+receding-horizon steps, replans after every step, commits to the pass at 1 m,
+and lands after crossing. Treat the default controller values as development
 examples, not safe settings for an arbitrary vehicle.
 
 ## Model and calibration provenance

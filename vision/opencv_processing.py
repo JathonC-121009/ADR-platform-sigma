@@ -15,7 +15,7 @@ USE_VIDEO_FILE = False  # True: Use MKV video file | False: Use Live Camera
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ASSETS_DIR = PROJECT_ROOT / "assets"
 VIDEO_FILE_PATH = PROJECT_ROOT / "F3video1_Flipped.mkv"
-FLIP_CAMERA = False      # Set to True if the physical camera is mounted upside down
+FLIP_CAMERA = True      # Set to True if the physical camera is mounted upside down
 # ==========================================
 
 class HailoYOLO:

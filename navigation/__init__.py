@@ -13,4 +13,4 @@ from .navigation import (
     UDP_PORT,
     VehicleState,
 )
-from .missions import MultiStageGateMission
+from .missions import MultiStageGateMission, SingleGateMission
