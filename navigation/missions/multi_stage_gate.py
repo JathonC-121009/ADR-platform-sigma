@@ -12,7 +12,7 @@ class MultiStageGateMission(GateMission):
             print(f"[*] Looking for Gate {gate_count + 1} of 8")
             print("==============================")
 
-            gate = self.observe_gate(nav, duration=10.0)
+            gate = self.observe_gate(nav, duration=3.0)
             if not gate:
                 nav.turn_around_180()
                 continue
@@ -20,7 +20,7 @@ class MultiStageGateMission(GateMission):
             target_3m = self.build_standoff_target(nav, gate, standoff_m=3.0)
             nav.move_to_target(target_3m, "3m Standoff", max_speed_m_s= 0.15)
 
-            gate = self.observe_gate(nav, duration=10.0)
+            gate = self.observe_gate(nav, duration=6.0)
             if not gate:
                 print("[!] Lost gate at 3m. Restarting.")
                 continue
@@ -28,7 +28,7 @@ class MultiStageGateMission(GateMission):
             target_2m = self.build_standoff_target(nav, gate, standoff_m=2.0)
             nav.move_to_target(target_2m, "2m Standoff", max_speed_m_s= 0.15)
 
-            gate = self.observe_gate(nav, duration=10.0)
+            gate = self.observe_gate(nav, duration=6.0)
             if not gate:
                 print("[!] Lost gate at 2m. Restarting.")
                 continue
@@ -36,7 +36,7 @@ class MultiStageGateMission(GateMission):
             target_1m = self.build_standoff_target(nav, gate, standoff_m=1.0)
             nav.move_to_target(target_1m, "1m Standoff", max_speed_m_s= 0.15)
 
-            gate = self.observe_gate(nav, duration=3.0)
+            gate = self.observe_gate(nav, duration=6.0)
             if not gate:
                 print("[!] Lost gate right before pass. Restarting.")
                 continue
