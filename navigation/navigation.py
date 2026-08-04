@@ -364,9 +364,16 @@ class GateMission(Mission):
         self,
         udp_ip: str = UDP_IP,
         udp_port: int = UDP_PORT,
+        *,
+        cam_offset_right_m: float = CAM_OFFSET_RIGHT_M,
+        cam_offset_down_m: float = CAM_OFFSET_DOWN_M,
+        cam_yaw_offset_deg: float = CAM_YAW_OFFSET_DEG,
     ):
         self.udp_ip = udp_ip
         self.udp_port = udp_port
+        self.cam_offset_right_m = cam_offset_right_m
+        self.cam_offset_down_m = cam_offset_down_m
+        self.cam_yaw_offset_deg = cam_yaw_offset_deg
 
         self._running = threading.Event()
         self._latest_detection: Optional[GateDetection] = None
@@ -487,15 +494,15 @@ class GateMission(Mission):
 
     def detection_to_gate_local(self, det: GateDetection, state: VehicleState):
         """Convert a camera-relative gate detection into local NED gate pose."""
-        corrected_right = det.right + CAM_OFFSET_RIGHT_M
-        corrected_down = det.down + CAM_OFFSET_DOWN_M
+        corrected_right = det.right + self.cam_offset_right_m
+        corrected_down = det.down + self.cam_offset_down_m
 
         dn, de, dd = body_to_local(det.forward, corrected_right, corrected_down, state.yaw_rad)
         gate_n = state.n + dn
         gate_e = state.e + de
         gate_d = state.d + dd
 
-        corrected_yaw_deg = det.yaw_deg + CAM_YAW_OFFSET_DEG
+        corrected_yaw_deg = det.yaw_deg + self.cam_yaw_offset_deg
         gate_yaw = wrap_pi(state.yaw_rad + deg_to_rad(corrected_yaw_deg))
 
         return gate_n, gate_e, gate_d, gate_yaw

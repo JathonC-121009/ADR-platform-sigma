@@ -13,7 +13,9 @@ sys.modules.setdefault("pymavlink.mavutil", fake_mavutil)
 
 from navigation.navigation import (  # noqa: E402
     GateDetection,
+    GateMission,
     NO_DETECTION_DIST,
+    VehicleState,
     body_to_local,
     deg_to_rad,
     is_valid_detection,
@@ -63,6 +65,34 @@ class NavigationGeometryTests(unittest.TestCase):
         self.assertFalse(is_valid_detection(None))
         self.assertFalse(is_valid_detection(missing))
         self.assertTrue(is_valid_detection(detected))
+
+    def test_gate_mission_camera_offsets_are_configurable(self):
+        mission = GateMission(
+            cam_offset_right_m=0.0,
+            cam_offset_down_m=0.0,
+            cam_yaw_offset_deg=0.0,
+        )
+        state = VehicleState(yaw_rad=0.0)
+        gate = GateDetection(
+            timestamp=0.0,
+            dist=5.0,
+            forward=5.0,
+            right=0.0,
+            down=0.0,
+            roll=0.0,
+            pitch=0.0,
+            yaw_deg=0.0,
+        )
+
+        gate_n, gate_e, gate_d, gate_yaw = mission.detection_to_gate_local(
+            gate,
+            state,
+        )
+
+        self.assertAlmostEqual(gate_n, 5.0)
+        self.assertAlmostEqual(gate_e, 0.0)
+        self.assertAlmostEqual(gate_d, 0.0)
+        self.assertAlmostEqual(gate_yaw, 0.0)
 
 
 if __name__ == "__main__":

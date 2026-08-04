@@ -158,6 +158,16 @@ receding-horizon steps, replans after every step, commits to the pass at 1 m,
 and lands after crossing. Treat the default controller values as development
 examples, not safe settings for an arbitrary vehicle.
 
+To isolate camera-offset effects during multi-stage simulator testing, set the
+three corrections to zero from the command line:
+
+```bash
+python -m scripts.multi_stage_gate_mission \
+  --camera-right-offset-m 0 \
+  --camera-down-offset-m 0 \
+  --camera-yaw-offset-deg 0
+```
+
 ## Model and calibration provenance
 
 The compiled model is intentionally excluded from the repository. Users must
