@@ -265,12 +265,25 @@ class NavigationController:
             0,
         )
 
-    def move_to_target(self, final_target: LocalTarget, label: str) -> bool:
-        """Drive toward a local target using a simple proportional velocity loop."""
+    def move_to_target(
+        self,
+        final_target: LocalTarget,
+        label: str,
+        *,
+        max_speed_m_s: float = MAX_FLIGHT_SPEED_M_S,
+        timeout_s: float = MOVE_TIMEOUT,
+    ) -> bool:
+        """Drive to a local target with per-move speed and timeout limits."""
+        if not math.isfinite(max_speed_m_s) or max_speed_m_s <= 0.0:
+            raise ValueError("max_speed_m_s must be a positive finite number")
+        if not math.isfinite(timeout_s) or timeout_s <= 0.0:
+            raise ValueError("timeout_s must be a positive finite number")
+
         print(
             f"[*] Moving to {label}: "
             f"N={final_target.n:.2f}, E={final_target.e:.2f}, "
-            f"D={final_target.d:.2f}, Yaw={rad_to_deg(final_target.yaw_rad):.1f} deg"
+            f"D={final_target.d:.2f}, Yaw={rad_to_deg(final_target.yaw_rad):.1f} deg, "
+            f"MaxSpeed={max_speed_m_s:.2f}m/s"
         )
 
         start_time = time.time()
@@ -289,7 +302,7 @@ class NavigationController:
                 self.send_velocity_and_yaw_target(0.0, 0.0, 0.0, final_target.yaw_rad)
                 return True
 
-            if time.time() - start_time > MOVE_TIMEOUT:
+            if time.time() - start_time > timeout_s:
                 print(f"[!] Timeout moving to {label}. Proceeding anyway.")
                 self.send_velocity_and_yaw_target(0.0, 0.0, 0.0, final_target.yaw_rad)
                 return False
@@ -299,10 +312,10 @@ class NavigationController:
             vd = KP_POS * err_d
 
             cmd_speed = math.sqrt(vn**2 + ve**2 + vd**2)
-            if cmd_speed > MAX_FLIGHT_SPEED_M_S:
-                vn = (vn / cmd_speed) * MAX_FLIGHT_SPEED_M_S
-                ve = (ve / cmd_speed) * MAX_FLIGHT_SPEED_M_S
-                vd = (vd / cmd_speed) * MAX_FLIGHT_SPEED_M_S
+            if cmd_speed > max_speed_m_s:
+                vn = (vn / cmd_speed) * max_speed_m_s
+                ve = (ve / cmd_speed) * max_speed_m_s
+                vd = (vd / cmd_speed) * max_speed_m_s
 
             self.send_velocity_and_yaw_target(vn, ve, vd, final_target.yaw_rad)
             time.sleep(period)
