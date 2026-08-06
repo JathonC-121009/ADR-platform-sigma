@@ -149,11 +149,24 @@ offsets, and MAVLink connection in a simulator:
 
 ```bash
 python -m scripts.multi_stage_gate_mission
+python -m scripts.single_gate_mission
 ```
 
 The mission approaches each detected gate at staged distances and then commands
-a pass-through target. Treat the default controller values as development
+a pass-through target. The single-gate mission instead takes 0.25 m
+receding-horizon steps, replans after every step, commits to the pass at 1 m,
+and lands after crossing. Treat the default controller values as development
 examples, not safe settings for an arbitrary vehicle.
+
+To isolate camera-offset effects during multi-stage simulator testing, set the
+three corrections to zero from the command line:
+
+```bash
+python -m scripts.multi_stage_gate_mission \
+  --camera-right-offset-m 0 \
+  --camera-down-offset-m 0 \
+  --camera-yaw-offset-deg 0
+```
 
 ## Model and calibration provenance
 
