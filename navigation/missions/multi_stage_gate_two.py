@@ -1,6 +1,6 @@
 from ..navigation import GateMission, NavigationController, wrap_pi, deg_to_rad
 
-class MultiStageGateMission(GateMission):
+class MultiStageGateMissionLevelTwo(GateMission):
 
     """Default race mission that approaches each gate in shrinking stages."""
 
