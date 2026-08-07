@@ -46,6 +46,9 @@ class VehicleState:
     n: float = 0.0
     e: float = 0.0
     d: float = 0.0
+    vx: float = 0.0
+    vy: float = 0.0
+    vz: float = 0.0
     yaw_rad: float = 0.0
     have_local_position: bool = False
     have_attitude: bool = False
@@ -197,6 +200,9 @@ class NavigationController:
                     self._vehicle.n = float(msg.x)
                     self._vehicle.e = float(msg.y)
                     self._vehicle.d = float(msg.z)
+                    self._vehicle.vx = float(msg.vx)
+                    self._vehicle.vy = float(msg.vy)
+                    self._vehicle.vz = float(msg.vz)
                     self._vehicle.have_local_position = True
                 elif msg_type == "ATTITUDE":
                     self._vehicle.yaw_rad = float(msg.yaw)
@@ -538,3 +544,44 @@ class GateMission(Mission):
 
     def run(self, nav: NavigationController):
         raise NotImplementedError
+
+    # new changes
+
+    def predictNewGatePos(self, nav: NavigationController, vehicle_state: Optional[VehicleState] = None, gate_data: Optional[GateDetection] = None):
+        """Return a motion-compensated gate pose (gate_n, gate_e, gate_d, gate_yaw).
+
+        Uses `gate_data` if provided, otherwise falls back to the latest UDP detection snapshot.
+        Uses `vehicle_state` if provided, otherwise snapshots current vehicle state from `nav`.
+        Returns `None` if no detection is available.
+        """
+        det = gate_data or self.get_latest_detection_snapshot()
+        if det is None:
+            return None
+
+        state = vehicle_state or nav.get_vehicle_snapshot()
+
+        gate_n, gate_e, gate_d, gate_yaw = self.detection_to_gate_local(det, state)
+
+        dt = time.time() - det.timestamp
+
+        vx = getattr(state, "vx", 0.0)
+        vy = getattr(state, "vy", 0.0)
+        vz = getattr(state, "vz", 0.0)
+
+        # Gate is stationary; shift its estimated world position opposite the drone motion
+        gate_n -= vx * dt
+        gate_e -= vy * dt
+        gate_d -= vz * dt
+
+        return gate_n, gate_e, gate_d, gate_yaw
+
+    def stage_complete(self, nav: NavigationController, target: LocalTarget) -> bool:
+        state = nav.get_vehicle_snapshot()
+        err_n = target.n - state.n
+        err_e = target.e - state.e
+        err_d = target.d - state.d
+
+        dist_xyz = (err_n**2 + err_e**2 + err_d**2)**0.5
+        yaw_err = wrap_pi(target.yaw_rad - state.yaw_rad)
+
+        return dist_xyz < POSITION_TOLERANCE_M and abs(rad_to_deg(yaw_err)) < YAW_TOLERANCE_DEG

@@ -25,6 +25,9 @@ class MultiStageGateMission(GateMission):
                 print("[!] Lost gate at 3m. Restarting.")
                 continue
 
+            # We could potentially remove some of the checks and make the remaining checks
+            # so that each check is more confident
+
             target_2m = self.build_standoff_target(nav, gate, standoff_m=2.0)
             nav.move_to_target(target_2m, "2m Standoff")
 
