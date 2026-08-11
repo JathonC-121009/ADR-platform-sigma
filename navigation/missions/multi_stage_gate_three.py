@@ -1,6 +1,6 @@
 from ..navigation import GateMission, NavigationController, wrap_pi, deg_to_rad
 
-class MultiStageGateMissionLevelTwo(GateMission):
+class MultiStageGateMissionLevelThree(GateMission):
 
     """Default race mission that approaches each gate in shrinking stages."""
 
@@ -162,21 +162,21 @@ class MultiStageGateMissionLevelTwo(GateMission):
                 if gate:
                     return gate
             return None
-        elif not expected_side:   # next gate is on the left
-            hold_yaw = nav.get_vehicle_snapshot().yaw_rad
-            for offset_deg in (0.0, -15.0, -30.0, -45.0, 15.0):
-                target_yaw = wrap_pi(hold_yaw + deg_to_rad(offset_deg))
-                nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, target_yaw)
-                gate = self.observe_gate(nav, duration=1.5)
-                if gate:
-                    return gate
-            return None
-        else:  # just normal observe forward
+        elif expected_side is None:  # just normal observe forward
             hold_yaw = nav.get_vehicle_snapshot().yaw_rad
             for offset_deg in (0.0, 15.0, -15.0, 30.0, -30.0):
                 target_yaw = wrap_pi(hold_yaw + deg_to_rad(offset_deg))
                 nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, target_yaw)
                 gate = self.observe_gate(nav, duration=2.5)
+                if gate:
+                    return gate
+            return None
+        else:   # next gate is on the left
+            hold_yaw = nav.get_vehicle_snapshot().yaw_rad
+            for offset_deg in (0.0, -15.0, -30.0, -45.0, 15.0):
+                target_yaw = wrap_pi(hold_yaw + deg_to_rad(offset_deg))
+                nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, target_yaw)
+                gate = self.observe_gate(nav, duration=1.5)
                 if gate:
                     return gate
             return None
