@@ -1,7 +1,6 @@
 import argparse
 import math
 from dataclasses import replace
-
 from ..navigation import (
     GateDetection,
     GateMission,
@@ -10,14 +9,15 @@ from ..navigation import (
     NavigationController,
     deg_to_rad,
     wrap_pi,
+    local_forward_vector,
 )
 
 PASS_ALTITUDE_MARGIN_M = 0.10
 GATE_REUSE_RADIUS_M = 1.5
-MAX_GATES = 8
-SEARCH_OFFSETS_DEG = (0.0, 15.0, -15.0, 30.0, -30.0, 45.0, -45.0)
+MAX_GATES = 4
+SEARCH_OFFSETS_DEG = (0.0, 15.0, 30.0, 45.0, 60.0, -15.0, -30.0) # for right
+# SEARCH_OFFSETS_DEG = (0.0, -15.0, -30.0, -45.0, -60.0, 15.0, 30.0) # for left
 SEARCH_DWELL_S = 1.5
-
 
 class MultiStageGateLevelThreeMission(GateMission):
 
@@ -49,11 +49,23 @@ class MultiStageGateLevelThreeMission(GateMission):
         for offset_deg in SEARCH_OFFSETS_DEG:
             target_yaw = wrap_pi(start_yaw + deg_to_rad(offset_deg))
             nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, target_yaw)
-
+        
             gate = self.observe_gate(nav, duration=dwell_s)
             if gate and not self._is_last_passed_gate(gate, nav):
                 return gate
         return None
+
+        
+        # start_yaw = nav.get_vehicle_snapshot().yaw_rad
+        # for offset_deg in SEARCH_OFFSETS_DEG:
+            # target_yaw = wrap_pi(start_yaw + deg_to_rad(offset_deg))
+            # nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, target_yaw)
+
+            # gate = self.observe_gate(nav, duration=dwell_s)
+            # if gate and not self._is_last_passed_gate(gate, nav):
+                # return gate
+        # return None
+
 
     def recover_gate(self, nav: NavigationController, last_gate, stage_standoff_m: float):
         if last_gate is None:
@@ -91,8 +103,28 @@ class MultiStageGateLevelThreeMission(GateMission):
 
             gate = self._acquire_next_gate(nav)
             if not gate:
-                print("[!] No gate in sight. Holding position without moving.")
-                continue
+                print("[!] No gate in sight. Holding position without moving."); continue
+            # refine: short conservative approach so the gate is more centered for final observe
+            state = nav.get_vehicle_snapshot()
+            gate_n, gate_e, gate_d, gate_yaw = self.detection_to_gate_local(gate, state)
+            f_n, f_e = local_forward_vector(gate_yaw)
+
+            approach_dist = 1.5  # meters; tune 1.0–2.0 for your setup
+            approach_target = LocalTarget(
+                n=gate_n - approach_dist * f_n,
+                e=gate_e - approach_dist * f_e,
+                d=gate_d,
+                yaw_rad=gate_yaw,
+            )
+            nav.move_to_target(approach_target, "Approach Gate", max_speed_m_s=0.1)
+
+            # refine observation from the new pose
+            gate = self.observe_gate(nav, duration=2.5)
+            if not gate:
+                gate = self.recover_gate(nav, last_gate, stage_standoff_m=3.0)
+                if not gate:
+                    print("[!] Lost gate during approach. Restarting.")
+                    continue
             last_gate = gate
 
             target_3m = self.build_standoff_target(nav, gate, standoff_m=3.0)
