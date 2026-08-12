@@ -162,6 +162,14 @@ class MultiStageGateLevelThreeMission(GateMission):
             gate_n, gate_e, gate_d, _ = self.detection_to_gate_local(gate, nav.get_vehicle_snapshot())
             self._last_passed_local = (gate_n, gate_e, gate_d)
 
+            # Verify hitbox fits before committing to pass
+            if not self.confirm_hitbox_fits(nav, gate):
+                print("[!] Hitbox doesn't fit through the gate. Attempting recovery.")
+                gate = self.recover_gate(nav, last_gate, stage_standoff_m=1.0)
+                if not gate:
+                    print("[!] Could not find a safe approach. Restarting.")
+                    continue
+
             pass_target = self.build_pass_through_target(nav, gate, pass_dist_m=1.5)
             nav.move_to_target(pass_target, "Through The Gate!")
 

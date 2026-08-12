@@ -4,7 +4,7 @@ import socket
 import threading
 import time
 from dataclasses import dataclass, replace
-from typing import Optional
+from typing import Optional, Tuple
 
 from pymavlink import mavutil
 
@@ -33,6 +33,20 @@ CAM_OFFSET_DOWN_M = -0.10
 CAM_YAW_OFFSET_DEG = -10.0
 
 NO_DETECTION_DIST = 999.0
+
+# =========================
+# HITBOX / GATE DEFAULTS
+# =========================
+# Drone hitbox expressed as (forward_length_m, width_m, height_m)
+DRONE_HITBOX_M: Tuple[float, float, float] = (0.2286, 0.2286, 0.2286)  # 9 in = 0.2286 m cube
+# Safety margin applied on each side of the hitbox (1 inch default)
+HITBOX_MARGIN_M: float = 0.0254  # 1 inch in meters
+# Default gate aperture dimensions (fallback if vision doesn't supply them)
+GATE_DEFAULT_WIDTH_M: float = 1.0
+GATE_DEFAULT_HEIGHT_M: float = 1.0
+# How many short observe samples must all report a fit before committing
+HITBOX_CONFIRM_SAMPLES: int = 3
+HITBOX_CONFIRM_SAMPLE_DURATION_S: float = 0.2
 
 
 # =========================
@@ -519,6 +533,38 @@ class GateMission(Mission):
         gate_yaw = wrap_pi(state.yaw_rad + deg_to_rad(corrected_yaw_deg))
 
         return gate_n, gate_e, gate_d, gate_yaw
+
+    def hitbox_fits_gate(self, det: GateDetection, hitbox_dims: tuple = DRONE_HITBOX_M, margin_m: float = HITBOX_MARGIN_M) -> bool:
+        """Return True if the configured hitbox (plus margin) fits the observed gate aperture.
+
+        This is a conservative axis-aligned check using available gate dimensions. If the
+        vision detection does not include explicit aperture sizes, fall back to module
+        defaults `GATE_DEFAULT_WIDTH_M` and `GATE_DEFAULT_HEIGHT_M`.
+        """
+        # If the detector includes explicit aperture fields, prefer them. Otherwise
+        # fall back to conservative defaults.
+        gate_width = getattr(det, "width", None) or GATE_DEFAULT_WIDTH_M
+        gate_height = getattr(det, "height", None) or GATE_DEFAULT_HEIGHT_M
+
+        # hitbox_dims is (forward_length, width, height)
+        _, hb_width, hb_height = hitbox_dims
+
+        lateral_ok = gate_width >= (hb_width + 2.0 * margin_m)
+        vertical_ok = gate_height >= (hb_height + 2.0 * margin_m)
+
+        print(f"[*] Hitbox check: gate_w={gate_width:.2f}, gate_h={gate_height:.2f}, hb_w={hb_width:.2f}, hb_h={hb_height:.2f}, margin={margin_m:.3f} => lateral_ok={lateral_ok}, vertical_ok={vertical_ok}")
+        return lateral_ok and vertical_ok
+
+    def confirm_hitbox_fits(self, nav: NavigationController, det: GateDetection, samples: int = HITBOX_CONFIRM_SAMPLES, sample_duration: float = HITBOX_CONFIRM_SAMPLE_DURATION_S) -> bool:
+        """Confirm the hitbox fit across several short observe samples to avoid
+        transient false positives/negatives from noisy detections."""
+        for _ in range(samples):
+            obs = self.observe_gate(nav, duration=sample_duration)
+            if not obs:
+                return False
+            if not self.hitbox_fits_gate(obs):
+                return False
+        return True
 
     def build_standoff_target(
         self,

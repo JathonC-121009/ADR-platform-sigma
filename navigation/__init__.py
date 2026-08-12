@@ -14,4 +14,5 @@ from .navigation import (
     VehicleState,
 )
 from .missions import MultiStageGateMission
+from .missions import SingleGateMission
 

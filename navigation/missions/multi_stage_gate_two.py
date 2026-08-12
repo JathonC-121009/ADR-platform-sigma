@@ -71,6 +71,15 @@ class MultiStageGateMissionLevelTwo(GateMission):
                     continue
             last_gate = gate
 
+            # Verify hitbox fits before committing to pass
+            if not self.confirm_hitbox_fits(nav, gate):
+                print("[!] Hitbox doesn't fit through the gate. Attempting local recovery.")
+                recovered = self.try_recover_gate(nav, last_gate, stage_standoff_m=1.0)
+                if not recovered:
+                    print("[!] Could not find a safe approach. Restarting.")
+                    continue
+                gate = recovered
+
             pass_target = self.build_pass_through_target(nav, gate, pass_dist_m=1.5)
             nav.move_to_target(pass_target, "Through The Gate!", max_speed_m_s= 0.15)
 

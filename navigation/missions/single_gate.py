@@ -157,6 +157,11 @@ class SingleGateMission(GateMission):
                 f"[*] Within {self.commit_distance_m:.2f}m; "
                 "committing to gate pass"
             )
+            # Confirm hitbox fit before committing to the crossing
+            if not self.confirm_hitbox_fits(nav, gate):
+                print("[!] Hitbox doesn't fit through the gate. Holding and retrying.")
+                continue
+
             pass_target = self.build_pass_through_target(
                 nav,
                 gate,
