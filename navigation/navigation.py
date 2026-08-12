@@ -46,9 +46,6 @@ class VehicleState:
     n: float = 0.0
     e: float = 0.0
     d: float = 0.0
-    vx: float = 0.0
-    vy: float = 0.0
-    vz: float = 0.0
     yaw_rad: float = 0.0
     have_local_position: bool = False
     have_attitude: bool = False
@@ -200,9 +197,6 @@ class NavigationController:
                     self._vehicle.n = float(msg.x)
                     self._vehicle.e = float(msg.y)
                     self._vehicle.d = float(msg.z)
-                    self._vehicle.vx = float(msg.vx)
-                    self._vehicle.vy = float(msg.vy)
-                    self._vehicle.vz = float(msg.vz)
                     self._vehicle.have_local_position = True
                 elif msg_type == "ATTITUDE":
                     self._vehicle.yaw_rad = float(msg.yaw)
@@ -271,12 +265,25 @@ class NavigationController:
             0,
         )
 
-    def move_to_target(self, final_target: LocalTarget, label: str) -> bool:
-        """Drive toward a local target using a simple proportional velocity loop."""
+    def move_to_target(
+        self,
+        final_target: LocalTarget,
+        label: str,
+        *,
+        max_speed_m_s: float = MAX_FLIGHT_SPEED_M_S,
+        timeout_s: float = MOVE_TIMEOUT,
+    ) -> bool:
+        """Drive to a local target with per-move speed and timeout limits."""
+        if not math.isfinite(max_speed_m_s) or max_speed_m_s <= 0.0:
+            raise ValueError("max_speed_m_s must be a positive finite number")
+        if not math.isfinite(timeout_s) or timeout_s <= 0.0:
+            raise ValueError("timeout_s must be a positive finite number")
+
         print(
             f"[*] Moving to {label}: "
             f"N={final_target.n:.2f}, E={final_target.e:.2f}, "
-            f"D={final_target.d:.2f}, Yaw={rad_to_deg(final_target.yaw_rad):.1f} deg"
+            f"D={final_target.d:.2f}, Yaw={rad_to_deg(final_target.yaw_rad):.1f} deg, "
+            f"MaxSpeed={max_speed_m_s:.2f}m/s"
         )
 
         start_time = time.time()
@@ -295,7 +302,7 @@ class NavigationController:
                 self.send_velocity_and_yaw_target(0.0, 0.0, 0.0, final_target.yaw_rad)
                 return True
 
-            if time.time() - start_time > MOVE_TIMEOUT:
+            if time.time() - start_time > timeout_s:
                 print(f"[!] Timeout moving to {label}. Proceeding anyway.")
                 self.send_velocity_and_yaw_target(0.0, 0.0, 0.0, final_target.yaw_rad)
                 return False
@@ -305,10 +312,10 @@ class NavigationController:
             vd = KP_POS * err_d
 
             cmd_speed = math.sqrt(vn**2 + ve**2 + vd**2)
-            if cmd_speed > MAX_FLIGHT_SPEED_M_S:
-                vn = (vn / cmd_speed) * MAX_FLIGHT_SPEED_M_S
-                ve = (ve / cmd_speed) * MAX_FLIGHT_SPEED_M_S
-                vd = (vd / cmd_speed) * MAX_FLIGHT_SPEED_M_S
+            if cmd_speed > max_speed_m_s:
+                vn = (vn / cmd_speed) * max_speed_m_s
+                ve = (ve / cmd_speed) * max_speed_m_s
+                vd = (vd / cmd_speed) * max_speed_m_s
 
             self.send_velocity_and_yaw_target(vn, ve, vd, final_target.yaw_rad)
             time.sleep(period)
@@ -370,9 +377,16 @@ class GateMission(Mission):
         self,
         udp_ip: str = UDP_IP,
         udp_port: int = UDP_PORT,
+        *,
+        cam_offset_right_m: float = CAM_OFFSET_RIGHT_M,
+        cam_offset_down_m: float = CAM_OFFSET_DOWN_M,
+        cam_yaw_offset_deg: float = CAM_YAW_OFFSET_DEG,
     ):
         self.udp_ip = udp_ip
         self.udp_port = udp_port
+        self.cam_offset_right_m = cam_offset_right_m
+        self.cam_offset_down_m = cam_offset_down_m
+        self.cam_yaw_offset_deg = cam_yaw_offset_deg
 
         self._running = threading.Event()
         self._latest_detection: Optional[GateDetection] = None
@@ -493,15 +507,15 @@ class GateMission(Mission):
 
     def detection_to_gate_local(self, det: GateDetection, state: VehicleState):
         """Convert a camera-relative gate detection into local NED gate pose."""
-        corrected_right = det.right + CAM_OFFSET_RIGHT_M
-        corrected_down = det.down + CAM_OFFSET_DOWN_M
+        corrected_right = det.right + self.cam_offset_right_m
+        corrected_down = det.down + self.cam_offset_down_m
 
         dn, de, dd = body_to_local(det.forward, corrected_right, corrected_down, state.yaw_rad)
         gate_n = state.n + dn
         gate_e = state.e + de
         gate_d = state.d + dd
 
-        corrected_yaw_deg = det.yaw_deg + CAM_YAW_OFFSET_DEG
+        corrected_yaw_deg = det.yaw_deg + self.cam_yaw_offset_deg
         gate_yaw = wrap_pi(state.yaw_rad + deg_to_rad(corrected_yaw_deg))
 
         return gate_n, gate_e, gate_d, gate_yaw
@@ -544,44 +558,3 @@ class GateMission(Mission):
 
     def run(self, nav: NavigationController):
         raise NotImplementedError
-
-    # new changes
-
-    def predictNewGatePos(self, nav: NavigationController, vehicle_state: Optional[VehicleState] = None, gate_data: Optional[GateDetection] = None):
-        """Return a motion-compensated gate pose (gate_n, gate_e, gate_d, gate_yaw).
-
-        Uses `gate_data` if provided, otherwise falls back to the latest UDP detection snapshot.
-        Uses `vehicle_state` if provided, otherwise snapshots current vehicle state from `nav`.
-        Returns `None` if no detection is available.
-        """
-        det = gate_data or self.get_latest_detection_snapshot()
-        if det is None:
-            return None
-
-        state = vehicle_state or nav.get_vehicle_snapshot()
-
-        gate_n, gate_e, gate_d, gate_yaw = self.detection_to_gate_local(det, state)
-
-        dt = time.time() - det.timestamp
-
-        vx = getattr(state, "vx", 0.0)
-        vy = getattr(state, "vy", 0.0)
-        vz = getattr(state, "vz", 0.0)
-
-        # Gate is stationary; shift its estimated world position opposite the drone motion
-        gate_n -= vx * dt
-        gate_e -= vy * dt
-        gate_d -= vz * dt
-
-        return gate_n, gate_e, gate_d, gate_yaw
-
-    def stage_complete(self, nav: NavigationController, target: LocalTarget) -> bool:
-        state = nav.get_vehicle_snapshot()
-        err_n = target.n - state.n
-        err_e = target.e - state.e
-        err_d = target.d - state.d
-
-        dist_xyz = (err_n**2 + err_e**2 + err_d**2)**0.5
-        yaw_err = wrap_pi(target.yaw_rad - state.yaw_rad)
-
-        return dist_xyz < POSITION_TOLERANCE_M and abs(rad_to_deg(yaw_err)) < YAW_TOLERANCE_DEG
