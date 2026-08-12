@@ -36,11 +36,7 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     nav = NavigationController(MAVLINK_CONN)
-    mission = MultiStageGateMission(
-        cam_offset_right_m=args.camera_right_offset_m,
-        cam_offset_down_m=args.camera_down_offset_m,
-        cam_yaw_offset_deg=args.camera_yaw_offset_deg,
-    )
+    mission = MultiStageGateMission()
     try:
         print("[*] Starting Multi-Stage Gate Mission")
         nav.run_mission(mission)
