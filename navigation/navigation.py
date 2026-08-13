@@ -23,6 +23,9 @@ POSITION_TOLERANCE_M = 0.10
 YAW_TOLERANCE_DEG = 5.0
 MOVE_TIMEOUT = 15.0
 
+# How old before a detection is considered stale and invalid (seconds)
+DETECTION_MAX_AGE_S = 0.5
+
 # --- VELOCITY CONTROLLER TUNING ---
 MAX_FLIGHT_SPEED_M_S = 0.5
 KP_POS = 1.2
@@ -111,7 +114,18 @@ def local_forward_vector(yaw_rad: float):
     return math.cos(yaw_rad), math.sin(yaw_rad)
 
 def is_valid_detection(det: Optional[GateDetection]) -> bool:
-    return det is not None and det.dist != NO_DETECTION_DIST
+    if det is None:
+        return False
+    if det.dist == NO_DETECTION_DIST:
+        return False
+    # detection timestamp must be recent
+    try:
+        if (time.time() - det.timestamp) > DETECTION_MAX_AGE_S:
+            return False
+    except Exception:
+        # if timestamp missing or invalid, treat as invalid
+        return False
+    return True
 
 
 class NavigationController:
@@ -428,8 +442,13 @@ class Mission:
                     print("[!] visual_servo_approach: large distance change, aborting servo")
                     break
 
-                # Body-frame errors: we want right -> 0 and down -> 0 (gate centered)
-                err_right = current.right + self.cam_offset_right_m
+                # Body-frame errors: apply camera yaw offset to translate camera-frame
+                # forward/right into body-forward/right before using offsets.
+                theta = deg_to_rad(self.cam_yaw_offset_deg)
+                f_b = current.forward * math.cos(theta) - current.right * math.sin(theta)
+                r_b = current.forward * math.sin(theta) + current.right * math.cos(theta)
+
+                err_right = r_b + self.cam_offset_right_m
                 err_down = current.down + self.cam_offset_down_m
 
                 # P controller in meters -> m/s
@@ -685,10 +704,16 @@ class GateMission(Mission):
 
     def detection_to_gate_local(self, det: GateDetection, state: VehicleState):
         """Convert a camera-relative gate detection into local NED gate pose."""
-        corrected_right = det.right + self.cam_offset_right_m
+        # Rotate camera-frame translation into body-frame using camera yaw offset,
+        # then apply the fixed camera lever-arm offsets before projecting into local NED.
+        theta = deg_to_rad(self.cam_yaw_offset_deg)
+        f_b = det.forward * math.cos(theta) - det.right * math.sin(theta)
+        r_b = det.forward * math.sin(theta) + det.right * math.cos(theta)
+
+        corrected_right = r_b + self.cam_offset_right_m
         corrected_down = det.down + self.cam_offset_down_m
 
-        dn, de, dd = body_to_local(det.forward, corrected_right, corrected_down, state.yaw_rad)
+        dn, de, dd = body_to_local(f_b, corrected_right, corrected_down, state.yaw_rad)
         gate_n = state.n + dn
         gate_e = state.e + de
         gate_d = state.d + dd
