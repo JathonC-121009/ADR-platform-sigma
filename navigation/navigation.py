@@ -381,6 +381,95 @@ class Mission:
     def run(self, nav: NavigationController):
         raise NotImplementedError
 
+    def visual_servo_approach(
+        self,
+        nav: NavigationController,
+        det: Optional[GateDetection] = None,
+        *,
+        max_correction_m: float = 0.25,
+        kp: float = 0.8,
+        duration_s: float = 2.0,
+        sample_interval: float = 0.1,
+        max_speed_override: float = 0.20,
+        dist_tolerance: float = 1.0,
+    ) -> bool:
+        """Conservative visual-servo that recenters the drone on the observed gate.
+
+        Safety-first design principles:
+        - Abort if the detection disappears or distance changes dramatically.
+        - Clamp commanded speeds below `max_speed_override` and `MAX_FLIGHT_SPEED_M_S`.
+        - Send a zero-velocity setpoint on exit to avoid leaving the vehicle moving.
+        - Non-destructive: does not change mission state or lasting offsets.
+        Returns True if the routine executed (even if it aborted early), False on invalid inputs.
+        """
+        if det is None:
+            det = self.get_latest_detection_snapshot()
+
+        if not is_valid_detection(det):
+            print("[!] visual_servo_approach: no valid initial detection, skipping")
+            return False
+
+        initial_dist = det.dist
+        start_t = time.time()
+        hold_yaw = nav.get_vehicle_snapshot().yaw_rad
+
+        period = max(0.01, float(sample_interval))
+        max_speed = min(max_speed_override, MAX_FLIGHT_SPEED_M_S)
+
+        try:
+            while nav.running and (time.time() - start_t) < float(duration_s):
+                current = self.get_latest_detection_snapshot()
+                if not is_valid_detection(current):
+                    print("[!] visual_servo_approach: detection lost, aborting servo")
+                    break
+
+                # If distance changes too much, assume we've switched targets or moved; abort
+                if abs(current.dist - initial_dist) > float(dist_tolerance):
+                    print("[!] visual_servo_approach: large distance change, aborting servo")
+                    break
+
+                # Body-frame errors: we want right -> 0 and down -> 0 (gate centered)
+                err_right = current.right + self.cam_offset_right_m
+                err_down = current.down + self.cam_offset_down_m
+
+                # P controller in meters -> m/s
+                body_v_forward = 0.0
+                body_v_right = kp * err_right
+                body_v_down = kp * err_down
+
+                mag = math.sqrt(body_v_forward**2 + body_v_right**2 + body_v_down**2)
+                if mag > 0.0 and mag > max_speed:
+                    scale = max_speed / mag
+                    body_v_forward *= scale
+                    body_v_right *= scale
+                    body_v_down *= scale
+
+                # Convert body velocities to local NED using the current vehicle yaw.
+                vn, ve, vd = body_to_local(body_v_forward, body_v_right, body_v_down, hold_yaw)
+
+                # Command yaw aligned to the observed gate yaw (with camera yaw offset applied)
+                try:
+                    yaw_cmd = wrap_pi(hold_yaw + deg_to_rad(current.yaw_deg + self.cam_yaw_offset_deg))
+                except Exception:
+                    yaw_cmd = hold_yaw
+
+                # Send conservative velocity + yaw setpoint
+                try:
+                    nav.send_velocity_and_yaw_target(vn, ve, vd, yaw_cmd)
+                except Exception as exc:
+                    print(f"[!] visual_servo_approach: failed to send setpoint: {exc}")
+                    break
+
+                time.sleep(period)
+
+        finally:
+            # Always send a zero-velocity setpoint to leave vehicle stable.
+            try:
+                nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, hold_yaw)
+            except Exception:
+                pass
+
+        return True
     def stop(self):
         pass
 
@@ -406,6 +495,12 @@ class GateMission(Mission):
         self._latest_detection: Optional[GateDetection] = None
         self._detection_lock = threading.Lock()
         self._udp_thread: Optional[threading.Thread] = None
+        # Debounce settings to avoid rapid flipping between detections
+        self._debounce_candidate: Optional[GateDetection] = None
+        self._debounce_count: int = 0
+        self._debounce_required: int = 3  # consecutive frames required to accept a candidate
+        self._debounce_pos_thresh_m: float = 0.2  # lateral/vertical change below this is considered same
+        self._debounce_dist_improve_m: float = 0.2  # immediate accept if new detection is this much closer
 
     @property
     def running(self) -> bool:
@@ -441,6 +536,71 @@ class GateMission(Mission):
             # Like vehicle snapshots, callers get a copy instead of the shared object.
             return replace(self._latest_detection)
 
+    def _maybe_update_detection(self, new_det: GateDetection) -> None:
+        """Conservative debounce: only replace _latest_detection when it's clearly
+        better or when the same candidate appears for a few consecutive frames.
+        Runs under no lock; it will acquire the detection lock internally.
+        """
+        if new_det is None:
+            return
+
+        with self._detection_lock:
+            cur = self._latest_detection
+
+            # If we have no current detection, accept immediately.
+            if cur is None:
+                self._latest_detection = replace(new_det)
+                self._debounce_candidate = None
+                self._debounce_count = 0
+                return
+
+            # If new detection is substantially closer, accept immediately.
+            if new_det.dist + 0.0 < (cur.dist - self._debounce_dist_improve_m):
+                self._latest_detection = replace(new_det)
+                self._debounce_candidate = None
+                self._debounce_count = 0
+                return
+
+            # If new detection is near the current one (small lateral/vertical change), refresh.
+            lateral_diff = abs(new_det.right - cur.right)
+            vertical_diff = abs(new_det.down - cur.down)
+            if lateral_diff <= self._debounce_pos_thresh_m and vertical_diff <= self._debounce_pos_thresh_m:
+                # update stored detection to the average for smoothing
+                avg = GateDetection(
+                    timestamp=time.time(),
+                    dist=(new_det.dist + cur.dist) / 2.0,
+                    forward=(new_det.forward + cur.forward) / 2.0,
+                    right=(new_det.right + cur.right) / 2.0,
+                    down=(new_det.down + cur.down) / 2.0,
+                    roll=(new_det.roll + cur.roll) / 2.0,
+                    pitch=(new_det.pitch + cur.pitch) / 2.0,
+                    yaw_deg=(new_det.yaw_deg + cur.yaw_deg) / 2.0,
+                )
+                self._latest_detection = avg
+                self._debounce_candidate = None
+                self._debounce_count = 0
+                return
+
+            # Otherwise, consider it a candidate and require consecutive frames to accept.
+            if self._debounce_candidate is None:
+                self._debounce_candidate = new_det
+                self._debounce_count = 1
+                return
+
+            # If candidate roughly matches previous candidate, increment counter.
+            cand = self._debounce_candidate
+            if abs(new_det.dist - cand.dist) < 0.5 and abs(new_det.right - cand.right) < 0.5:
+                self._debounce_count += 1
+            else:
+                # different candidate, restart counting
+                self._debounce_candidate = new_det
+                self._debounce_count = 1
+
+            if self._debounce_count >= self._debounce_required:
+                self._latest_detection = replace(self._debounce_candidate)
+                self._debounce_candidate = None
+                self._debounce_count = 0
+
     def _udp_gate_listener(self):
         """Listen for the latest vision packet and keep only the newest gate."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -470,8 +630,12 @@ class GateMission(Mission):
                         yaw_deg=float(gate[6]),
                     )
 
-                    with self._detection_lock:
-                        self._latest_detection = det
+                    # Use debounce logic to avoid rapid flipping between similar detections.
+                    try:
+                        self._maybe_update_detection(det)
+                    except Exception as exc:
+                        # Never let the UDP thread crash for a non-critical logic error.
+                        print(f"[!] debounce update error: {exc}")
 
                 except socket.timeout:
                     continue

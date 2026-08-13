@@ -80,6 +80,21 @@ class MultiStageGateMissionLevelTwo(GateMission):
                     continue
                 gate = recovered
 
+            # Run a short, conservative visual-servo to recentre on the gate before passing.
+            # This is safety-first: small corrections, bounded speed, aborts if detection lost.
+            try:
+                self.visual_servo_approach(
+                    nav,
+                    gate,
+                    max_correction_m=0.20,
+                    kp=0.8,
+                    duration_s=1.5,
+                    sample_interval=0.08,
+                    max_speed_override=0.12,
+                )
+            except Exception as exc:
+                print(f"[!] visual_servo_approach raised: {exc} (continuing to pass)")
+
             pass_target = self.build_pass_through_target(nav, gate, pass_dist_m=1.5)
             nav.move_to_target(pass_target, "Through The Gate!", max_speed_m_s= 0.15)
 
