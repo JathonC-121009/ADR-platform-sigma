@@ -64,8 +64,8 @@ class MultiStageGateMission(GateMission):
                     continue
                 gate = recovered
 
-            pass_target = self.build_pass_through_target(nav, gate, pass_dist_m=1.5)
-            nav.move_to_target(pass_target, "Through The Gate!", max_speed_m_s= 0.15)
+            # Use centralized helper that disables vertical commands during pass.
+            self.perform_pass_through(nav, gate, pass_dist_m=1.5, max_speed_m_s=0.15)
 
             gate_count += 1
             print(f"[*] Successfully navigated Gate {gate_count}!")

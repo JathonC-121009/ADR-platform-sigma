@@ -162,12 +162,7 @@ class SingleGateMission(GateMission):
                 print("[!] Hitbox doesn't fit through the gate. Holding and retrying.")
                 continue
 
-            pass_target = self.build_pass_through_target(
-                nav,
-                gate,
-                pass_dist_m=self.pass_distance_m,
-            )
-            crossed = nav.move_to_target(pass_target, "through the gate")
+            crossed = self.perform_pass_through(nav, gate, pass_dist_m=self.pass_distance_m, max_speed_m_s=0.15, label="through the gate")
             if not crossed:
                 print("[!] Pass-through move timed out; landing at current position.")
 

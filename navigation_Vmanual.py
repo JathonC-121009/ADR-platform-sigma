@@ -448,8 +448,12 @@ def run_gate_mission():
             continue
         
         # Calculate a point 1.5 meters beyond the gate
-        pass_target = build_pass_through_target(gate, pass_dist_m=1.5)
-        move_to_target(pass_target, "Through The Gate!")
+        try:
+            set_vertical_enabled(False)
+            pass_target = build_pass_through_target(gate, pass_dist_m=1.5)
+            move_to_target(pass_target, "Through The Gate!")
+        finally:
+            set_vertical_enabled(True)
 
         gate_count += 1
         print(f"[*] Successfully navigated Gate {gate_count}!")

@@ -141,6 +141,10 @@ class NavigationController:
         self._running = threading.Event()
         self._vehicle = VehicleState()
         self._vehicle_lock = threading.Lock()
+        # Control whether vertical movement commands are allowed. When False,
+        # `send_velocity_and_yaw_target` will send zero vertical velocity.
+        self._vertical_enabled = True
+        self._vertical_lock = threading.Lock()
         self._mavlink_thread: Optional[threading.Thread] = None
 
     @property
@@ -274,6 +278,13 @@ class NavigationController:
             | mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE
         )
 
+        # If vertical commands are disabled (e.g. during a pass-through), force vd=0.
+        with self._vertical_lock:
+            if not self._vertical_enabled:
+                vd_to_send = 0.0
+            else:
+                vd_to_send = vd
+
         self.master.mav.set_position_target_local_ned_send(
             0,
             self.master.target_system,
@@ -285,13 +296,23 @@ class NavigationController:
             0,
             vn,
             ve,
-            vd,
+            vd_to_send,
             0,
             0,
             0,
             yaw_rad,
             0,
         )
+
+    def set_vertical_enabled(self, enabled: bool) -> None:
+        """Enable or disable sending vertical velocity commands.
+
+        When disabled, `send_velocity_and_yaw_target` will send `vd=0.0`.
+        This is thread-safe and intended for short critical sections such as
+        pass-through maneuvers.
+        """
+        with self._vertical_lock:
+            self._vertical_enabled = bool(enabled)
 
     def move_to_target(
         self,
@@ -790,6 +811,18 @@ class GateMission(Mission):
             d=gate_d,
             yaw_rad=gate_yaw,
         )
+
+    def perform_pass_through(self, nav: NavigationController, det: GateDetection, pass_dist_m: float, *, max_speed_m_s: float = 0.15, label: str = "Through The Gate!") -> bool:
+        """Helper that disables vertical commands, executes the pass-through move, and restores vertical control.
+
+        Returns the boolean result from `move_to_target`.
+        """
+        target = self.build_pass_through_target(nav, det, pass_dist_m)
+        try:
+            nav.set_vertical_enabled(False)
+            return nav.move_to_target(target, label, max_speed_m_s=max_speed_m_s)
+        finally:
+            nav.set_vertical_enabled(True)
 
     def run(self, nav: NavigationController):
         raise NotImplementedError
