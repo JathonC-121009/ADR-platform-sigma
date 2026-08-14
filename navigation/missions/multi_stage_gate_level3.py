@@ -1,5 +1,6 @@
 import argparse
 import math
+import time
 from dataclasses import replace
 from ..navigation import (
     GateDetection,
@@ -93,7 +94,15 @@ class MultiStageGateLevelThreeMission(GateMission):
 
         while nav.running:
             if self.max_gates and gate_count >= self.max_gates:
-                print(f"[*] Completed {gate_count} gates; landing.")
+                print(f"[*] Completed {gate_count} gates; performing final forward and landing.")
+                state = nav.get_vehicle_snapshot()
+                f_n = math.cos(state.yaw_rad)
+                f_e = math.sin(state.yaw_rad)
+                forward_target = LocalTarget(n=state.n + 0.5 * f_n, e=state.e + 0.5 * f_e, d=state.d, yaw_rad=state.yaw_rad)
+                nav.move_to_target(forward_target, "Final 0.5m forward", max_speed_m_s=0.15)
+                hold_yaw = state.yaw_rad
+                nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, hold_yaw)
+                time.sleep(0.2)
                 nav.land()
                 return
 

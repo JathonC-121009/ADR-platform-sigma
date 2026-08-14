@@ -359,8 +359,11 @@ class OpenCVProcessing():
                                 continue
 
                             try:
+                                pnp_flag = getattr(cv2, 'SOLVEPNP_IPPE_SQUARE', None)
+                                if pnp_flag is None:
+                                    pnp_flag = getattr(cv2, 'SOLVEPNP_SQPNP')
                                 success, rvec, tvec = cv2.solvePnP(
-                                    self.GATE_3D_CORNERS, undistorted_corners, self.K, np.zeros(4), flags=cv2.SOLVEPNP_SQPNP
+                                    self.GATE_3D_CORNERS, undistorted_corners, self.K, np.zeros(4), flags=pnp_flag
                                 )
 
                             except cv2.error as e:
