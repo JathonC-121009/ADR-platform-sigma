@@ -442,29 +442,12 @@ class NavigationController:
         self.move_to_target(target, "180 Degree Turnaround")
 
     def land(self):
-        """Send a land command after first stabilizing with a zero-velocity setpoint."""
-        hold_yaw = self.get_vehicle_snapshot().yaw_rad
-        self.send_velocity_and_yaw_target(0.0, 0.0, 0.0, hold_yaw)
-        time.sleep(0.5)
+        """Landing disabled: this build requires manual landing.
 
-        try:
-            assert self.master is not None
-            self.master.mav.command_long_send(
-                self.master.target_system,
-                self.master.target_component,
-                mavutil.mavlink.MAV_CMD_NAV_LAND,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-                0,
-            )
-            print("[*] Land command sent successfully.")
-        except Exception as exc:
-            print(f"[!] Failed to send land command: {exc}")
+        The landing mechanism has been removed to avoid automatic land commands.
+        Callers should instruct the operator to land manually.
+        """
+        print("[!] Landing disabled by configuration. Please land the vehicle manually.")
 
 class Mission:
     """Minimal mission interface used by NavigationController.run_mission()."""

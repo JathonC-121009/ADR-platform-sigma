@@ -141,8 +141,8 @@ class MultiStageGateMissionLevelThree(GateMission):
 
             '''
 
-        if gate_count >= self.NUM_GATES:
-            nav.land()
+        if gate_count >= 8:
+            print("[!] Mission complete; landing disabled. Please land the vehicle manually.")
 
 
     def try_recover_gate(self, nav, last_gate, stage_standoff_m):

@@ -297,25 +297,8 @@ def turn_around_180():
 
 
 def land_drone():
-    """ Sends the universal MAVLink command to initiate a landing """
-    print("\n==============================")
-    print("[*] MISSION COMPLETE (8 GATES). INITIATING LANDING!")
-    print("==============================")
-    
-    # Send 0 velocity command just to stabilize before land
-    with vehicle_lock:
-        send_velocity_and_yaw_target(0.0, 0.0, 0.0, vehicle.yaw_rad)
-    time.sleep(0.5)
-
-    try:
-        master.mav.command_long_send(
-            master.target_system, master.target_component,
-            mavutil.mavlink.MAV_CMD_NAV_LAND, 0,
-            0, 0, 0, 0, 0, 0, 0
-        )
-        print("[*] Land command sent successfully.")
-    except Exception as e:
-        print(f"[!] Failed to send land command: {e}")
+    """Landing disabled helper: replaced automatic landing with operator prompt."""
+    print("[!] Landing disabled by configuration. Please land the vehicle manually when safe.")
 
 
 # =========================

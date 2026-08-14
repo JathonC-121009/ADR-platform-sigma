@@ -162,16 +162,8 @@ class MultiStageGateMissionLevelTwo(GateMission):
 
             '''
 
-        if gate_count >= self.NUM_GATES:
-            state = nav.get_vehicle_snapshot()
-            f_n = math.cos(state.yaw_rad)
-            f_e = math.sin(state.yaw_rad)
-            forward_target = LocalTarget(n=state.n + 0.5 * f_n, e=state.e + 0.5 * f_e, d=state.d, yaw_rad=state.yaw_rad)
-            nav.move_to_target(forward_target, "Final 0.5m forward", max_speed_m_s=0.15)
-            hold_yaw = state.yaw_rad
-            nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, hold_yaw)
-            time.sleep(0.2)
-            nav.land()
+        if gate_count >= 8:
+            print("[!] Mission complete; landing disabled. Please land the vehicle manually.")
 
 
     def try_recover_gate(self, nav, last_gate, stage_standoff_m):

@@ -167,5 +167,5 @@ class SingleGateMission(GateMission):
                 print("[!] Pass-through move timed out; landing at current position.")
 
             if nav.running:
-                nav.land()
+                print("[!] Mission complete; landing disabled. Please land the vehicle manually.")
             return
