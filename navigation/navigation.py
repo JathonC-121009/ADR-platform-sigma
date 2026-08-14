@@ -149,6 +149,12 @@ class NavigationController:
         self._vertical_enabled = True
         self._vertical_lock = threading.Lock()
         self._mavlink_thread: Optional[threading.Thread] = None
+        # Last commanded velocity/yaw used for smoothing setpoints
+        self._last_cmd_vn: float = 0.0
+        self._last_cmd_ve: float = 0.0
+        self._last_cmd_vd: float = 0.0
+        self._last_yaw_cmd: float = 0.0
+        self._last_cmd_time: float = time.time()
 
     @property
     def running(self) -> bool:
@@ -281,12 +287,61 @@ class NavigationController:
             | mavutil.mavlink.POSITION_TARGET_TYPEMASK_YAW_RATE_IGNORE
         )
 
+        # Smooth velocities and limit yaw-rate to avoid abrupt setpoints.
+        now = time.time()
+        dt = max(1e-3, now - self._last_cmd_time)
+
+        # First-order low-pass filter time constant (seconds)
+        tau = 0.15
+        alpha = dt / (tau + dt)
+
+        # Exponential smoothing for velocities
+        smooth_vn = (1.0 - alpha) * self._last_cmd_vn + alpha * vn
+        smooth_ve = (1.0 - alpha) * self._last_cmd_ve + alpha * ve
+        smooth_vd = (1.0 - alpha) * self._last_cmd_vd + alpha * vd
+
+        # Clamp acceleration (m/s^2) per axis to avoid jerky commands
+        max_accel = 1.0
+        max_delta = max_accel * dt
+        def clamp_delta(new, old):
+            delta = new - old
+            if delta > max_delta:
+                return old + max_delta
+            if delta < -max_delta:
+                return old - max_delta
+            return new
+
+        smooth_vn = clamp_delta(smooth_vn, self._last_cmd_vn)
+        smooth_ve = clamp_delta(smooth_ve, self._last_cmd_ve)
+        smooth_vd = clamp_delta(smooth_vd, self._last_cmd_vd)
+
         # If vertical commands are disabled (e.g. during a pass-through), force vd=0.
         with self._vertical_lock:
             if not self._vertical_enabled:
-                vd_to_send = 0.0
-            else:
-                vd_to_send = vd
+                smooth_vd = 0.0
+
+        # Limit small vertical jitter to zero
+        if abs(smooth_vd) < 0.005:
+            smooth_vd = 0.0
+
+        # Limit yaw-rate change (rad/s)
+        max_yaw_rate_deg = 60.0
+        max_yaw_rate_rad = deg_to_rad(max_yaw_rate_deg)
+        yaw_delta = wrap_pi(yaw_rad - self._last_yaw_cmd)
+        max_yaw_delta = max_yaw_rate_rad * dt
+        if yaw_delta > max_yaw_delta:
+            yaw_to_send = wrap_pi(self._last_yaw_cmd + max_yaw_delta)
+        elif yaw_delta < -max_yaw_delta:
+            yaw_to_send = wrap_pi(self._last_yaw_cmd - max_yaw_delta)
+        else:
+            yaw_to_send = wrap_pi(yaw_rad)
+
+        # Update last-command state
+        self._last_cmd_vn = smooth_vn
+        self._last_cmd_ve = smooth_ve
+        self._last_cmd_vd = smooth_vd
+        self._last_yaw_cmd = yaw_to_send
+        self._last_cmd_time = now
 
         self.master.mav.set_position_target_local_ned_send(
             0,
@@ -297,13 +352,13 @@ class NavigationController:
             0,
             0,
             0,
-            vn,
-            ve,
-            vd_to_send,
+            smooth_vn,
+            smooth_ve,
+            smooth_vd,
             0,
             0,
             0,
-            yaw_rad,
+            yaw_to_send,
             0,
         )
 
@@ -886,6 +941,12 @@ class GateMission(Mission):
 
         Returns the boolean result from `move_to_target`.
         """
+        # Pre-pass: try a short conservative centering servo to reduce lateral bias
+        try:
+            self.visual_servo_approach(nav, det, max_correction_m=0.12, kp=0.6, duration_s=0.8, sample_interval=0.07, max_speed_override=0.10)
+        except Exception:
+            pass
+
         # Commit the detection for the duration of the pass to avoid the vision
         # switching to other gates mid-pass. If commit fails (sanity checks),
         # abort the pass.
@@ -902,6 +963,12 @@ class GateMission(Mission):
             nav.set_vertical_enabled(True)
             # Always release the commit regardless of pass outcome
             self.release_commit()
+            # Small hold to let vehicle settle after pass
+            try:
+                hold_yaw = nav.get_vehicle_snapshot().yaw_rad
+                nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, hold_yaw)
+            except Exception:
+                pass
 
     def run(self, nav: NavigationController):
         raise NotImplementedError
