@@ -1,10 +1,6 @@
-import math
-import time
-
-from ..navigation import GateMission, NavigationController, wrap_pi, deg_to_rad, LocalTarget
+from ..navigation import GateMission, NavigationController, wrap_pi, deg_to_rad
 
 class MultiStageGateMission(GateMission):
-    NUM_GATES = 4
 
     """Default race mission that approaches each gate in shrinking stages."""
 
@@ -13,9 +9,9 @@ class MultiStageGateMission(GateMission):
         """Fly the 3m -> 2m -> 1m -> pass-through sequence for up to 8 gates."""
         gate_count = 0
 
-        while nav.running and gate_count < self.NUM_GATES:
+        while nav.running and gate_count < 8:
             print("\n==============================")
-            print(f"[*] Looking for Gate {gate_count + 1} of {self.NUM_GATES}")
+            print(f"[*] Looking for Gate {gate_count + 1} of 8")
             print("==============================")
 
             gate = self.observe_gate(nav, duration=2.5)
@@ -74,18 +70,7 @@ class MultiStageGateMission(GateMission):
             gate_count += 1
             print(f"[*] Successfully navigated Gate {gate_count}!")
 
-        if gate_count >= self.NUM_GATES:
-            # Move forward 0.5m, hold, then land straight down at current position
-            state = nav.get_vehicle_snapshot()
-            f_n = math.cos(state.yaw_rad)
-            f_e = math.sin(state.yaw_rad)
-            forward_target = LocalTarget(n=state.n + 0.5 * f_n, e=state.e + 0.5 * f_e, d=state.d, yaw_rad=state.yaw_rad)
-            nav.move_to_target(forward_target, "Final 0.5m forward", max_speed_m_s=0.15)
-
-            # Hold position then request a land so vehicle lands vertically from here.
-            hold_yaw = state.yaw_rad
-            nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, hold_yaw)
-            time.sleep(0.2)
+        if gate_count >= 8:
             nav.land()
 
 

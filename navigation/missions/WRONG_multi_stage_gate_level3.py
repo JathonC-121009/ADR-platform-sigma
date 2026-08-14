@@ -3,7 +3,6 @@ from ..navigation import GateMission, NavigationController, wrap_pi, deg_to_rad
 class MultiStageGateMissionLevelThree(GateMission):
 
     """Default race mission that approaches each gate in shrinking stages."""
-    NUM_GATES = 4
 
     def run(self, nav: NavigationController):
         last_gate = None
@@ -14,7 +13,7 @@ class MultiStageGateMissionLevelThree(GateMission):
                                       # gate is on left. change the starting boolean value
                                       # depending on how the course is
 
-        while nav.running and gate_count < self.NUM_GATES:
+        while nav.running and gate_count < 8:
 
             print("\n==============================")
             print(f"[*] Looking for Gate {gate_count + 1} of 8")
@@ -141,7 +140,7 @@ class MultiStageGateMissionLevelThree(GateMission):
 
             '''
 
-        if gate_count >= self.NUM_GATES:
+        if gate_count >= 8:
             nav.land()
 
 

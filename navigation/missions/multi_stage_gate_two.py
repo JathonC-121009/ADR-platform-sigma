@@ -1,13 +1,8 @@
-from ..navigation import GateMission, NavigationController, wrap_pi, deg_to_rad, LocalTarget
-import math
-import time
-
+from ..navigation import GateMission, NavigationController, wrap_pi, deg_to_rad
 
 class MultiStageGateMissionLevelTwo(GateMission):
 
     """Default race mission that approaches each gate in shrinking stages."""
-
-    NUM_GATES = 4
 
     def run(self, nav: NavigationController):
         last_gate = None
@@ -18,10 +13,10 @@ class MultiStageGateMissionLevelTwo(GateMission):
                                       # gate is on left. change the starting boolean value
                                       # depending on how the course is
 
-        while nav.running and gate_count < self.NUM_GATES:
+        while nav.running and gate_count < 8:
 
             print("\n==============================")
-            print(f"[*] Looking for Gate {gate_count + 1} of {self.NUM_GATES}")
+            print(f"[*] Looking for Gate {gate_count + 1} of 8")
             print("==============================")
 
             gate = self.scan_for_gate(nav, None, expect_gate_direction)
@@ -110,7 +105,7 @@ class MultiStageGateMissionLevelTwo(GateMission):
 
             '''
             print("\n==============================")
-            print(f"[*] Looking for Gate {gate_count + 1} of {self.NUM_GATES}")
+            print(f"[*] Looking for Gate {gate_count + 1} of 8")
             print("==============================")
 
             gate = self.observe_gate(nav, duration=2.5)
@@ -162,15 +157,7 @@ class MultiStageGateMissionLevelTwo(GateMission):
 
             '''
 
-        if gate_count >= self.NUM_GATES:
-            state = nav.get_vehicle_snapshot()
-            f_n = math.cos(state.yaw_rad)
-            f_e = math.sin(state.yaw_rad)
-            forward_target = LocalTarget(n=state.n + 0.5 * f_n, e=state.e + 0.5 * f_e, d=state.d, yaw_rad=state.yaw_rad)
-            nav.move_to_target(forward_target, "Final 0.5m forward", max_speed_m_s=0.15)
-            hold_yaw = state.yaw_rad
-            nav.send_velocity_and_yaw_target(0.0, 0.0, 0.0, hold_yaw)
-            time.sleep(0.2)
+        if gate_count >= 8:
             nav.land()
 
 
