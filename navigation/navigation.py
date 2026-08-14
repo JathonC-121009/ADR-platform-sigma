@@ -50,6 +50,10 @@ GATE_DEFAULT_HEIGHT_M: float = 1.0
 # How many short observe samples must all report a fit before committing
 HITBOX_CONFIRM_SAMPLES: int = 3
 HITBOX_CONFIRM_SAMPLE_DURATION_S: float = 0.2
+# When refreshing a detection just before a pass, reject a replacement whose
+# range disagrees with the original by more than this. Keeps the pass locked to
+# the gate we approached instead of letting vision switch to the next one.
+PASS_REFRESH_MAX_DIST_DELTA_M: float = 1.0
 
 
 # =========================
@@ -851,13 +855,21 @@ class GateMission(Mission):
 
         return gate_n, gate_e, gate_d, gate_yaw
 
-    def hitbox_fits_gate(self, det: GateDetection, hitbox_dims: tuple = DRONE_HITBOX_M, margin_m: float = HITBOX_MARGIN_M) -> bool:
+    def hitbox_fits_gate(self, det: GateDetection, hitbox_dims: Optional[tuple] = None, margin_m: Optional[float] = None) -> bool:
         """Return True if the configured hitbox (plus margin) fits the observed gate aperture.
 
         This is a conservative axis-aligned check using available gate dimensions. If the
         vision detection does not include explicit aperture sizes, fall back to module
         defaults `GATE_DEFAULT_WIDTH_M` and `GATE_DEFAULT_HEIGHT_M`.
         """
+        # Resolve the hitbox from module state at call time rather than binding it
+        # as a default argument, so runner scripts that override DRONE_HITBOX_M /
+        # HITBOX_MARGIN_M before starting a mission actually take effect.
+        if hitbox_dims is None:
+            hitbox_dims = DRONE_HITBOX_M
+        if margin_m is None:
+            margin_m = HITBOX_MARGIN_M
+
         # If the detector includes explicit aperture fields, prefer them. Otherwise
         # fall back to conservative defaults.
         gate_width = getattr(det, "width", None) or GATE_DEFAULT_WIDTH_M
@@ -919,16 +931,40 @@ class GateMission(Mission):
             yaw_rad=gate_yaw,
         )
 
+    def _refresh_detection(self, det: GateDetection) -> GateDetection:
+        """Return the newest live detection when it agrees with `det` on range.
+
+        Missions spend far longer than DETECTION_MAX_AGE_S observing between
+        acquiring a detection and using it, so the snapshot handed down is
+        reliably expired. Re-reading the live feed keeps the gate pose current;
+        requiring the range to agree within PASS_REFRESH_MAX_DIST_DELTA_M still
+        refuses a switch to a different gate mid-approach. Falls back to `det`
+        unchanged when nothing better is available.
+        """
+        fresh = self.get_latest_detection_snapshot()
+        if is_valid_detection(fresh) and abs(fresh.dist - det.dist) <= PASS_REFRESH_MAX_DIST_DELTA_M:
+            return fresh
+        return det
+
     def perform_pass_through(self, nav: NavigationController, det: GateDetection, pass_dist_m: float, *, max_speed_m_s: float = 0.15, label: str = "Through The Gate!") -> bool:
         """Helper that disables vertical commands, executes the pass-through move, and restores vertical control.
 
         Returns the boolean result from `move_to_target`.
         """
+        # `det` arrives already expired: confirm_hitbox_fits() observes for
+        # HITBOX_CONFIRM_SAMPLES * HITBOX_CONFIRM_SAMPLE_DURATION_S (0.6s by
+        # default) before calling us, which alone exceeds DETECTION_MAX_AGE_S.
+        det = self._refresh_detection(det)
+
         # Pre-pass: try a short conservative centering servo to reduce lateral bias
         try:
             self.visual_servo_approach(nav, det, max_correction_m=0.12, kp=0.6, duration_s=0.8, sample_interval=0.07, max_speed_override=0.10)
         except Exception:
             pass
+
+        # The servo above hovers for another ~0.8s, so refresh again before the
+        # commit rather than handing it a snapshot that expired during centering.
+        det = self._refresh_detection(det)
 
         # Commit the detection for the duration of the pass to avoid the vision
         # switching to other gates mid-pass. If commit fails (sanity checks),

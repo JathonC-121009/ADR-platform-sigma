@@ -359,11 +359,13 @@ class OpenCVProcessing():
                                 continue
 
                             try:
-                                pnp_flag = getattr(cv2, 'SOLVEPNP_IPPE_SQUARE', None)
-                                if pnp_flag is None:
-                                    pnp_flag = getattr(cv2, 'SOLVEPNP_SQPNP')
+                                # SOLVEPNP_IPPE_SQUARE expects its own corner order
+                                # ((-x,+y),(+x,+y),(+x,-y),(-x,-y)). GATE_3D_CORNERS uses
+                                # the opposite Y sign, which makes IPPE return a mirrored
+                                # pose with negative z that the cv_z < 0 check discards.
+                                # SQPnP has no ordering requirement and matches our corners.
                                 success, rvec, tvec = cv2.solvePnP(
-                                    self.GATE_3D_CORNERS, undistorted_corners, self.K, np.zeros(4), flags=pnp_flag
+                                    self.GATE_3D_CORNERS, undistorted_corners, self.K, np.zeros(4), flags=cv2.SOLVEPNP_SQPNP
                                 )
 
                             except cv2.error as e:
@@ -380,7 +382,12 @@ class OpenCVProcessing():
                                 try:
                                     proj_pts, _ = cv2.projectPoints(self.GATE_3D_CORNERS, rvec, tvec, self.K, np.zeros(4))
                                     proj_pts = proj_pts.reshape(-1, 2)
-                                    reproj_errs = np.linalg.norm(proj_pts - undistorted_corners, axis=1)
+                                    # undistorted_corners is (N,1,2); flatten it so this
+                                    # subtracts corner-for-corner. Without the reshape it
+                                    # broadcasts to (N,N,2) and measures gate size in
+                                    # pixels rather than reprojection error, which
+                                    # rejects every pose including exact ones.
+                                    reproj_errs = np.linalg.norm(proj_pts - undistorted_corners.reshape(-1, 2), axis=1)
                                     reproj_mean = float(np.mean(reproj_errs))
                                     if reproj_mean > 6.0:
                                         continue

@@ -74,7 +74,7 @@ class MultiStageGateMission(GateMission):
             gate_count += 1
             print(f"[*] Successfully navigated Gate {gate_count}!")
 
-        if gate_count >= 8:
+        if gate_count >= self.NUM_GATES:
             print("[!] Mission complete; landing disabled. Please land the vehicle manually.")
 
 

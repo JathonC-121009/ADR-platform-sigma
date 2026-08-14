@@ -162,7 +162,7 @@ class MultiStageGateMissionLevelTwo(GateMission):
 
             '''
 
-        if gate_count >= 8:
+        if gate_count >= self.NUM_GATES:
             print("[!] Mission complete; landing disabled. Please land the vehicle manually.")
 
 
@@ -182,7 +182,10 @@ class MultiStageGateMissionLevelTwo(GateMission):
         return None
 
     def scan_for_gate(self, nav, last_gate, expected_side: bool):  # to be changed for level 2
-        if expected_side:   # next gate is on the right
+        # Compare against True/False explicitly: try_recover_gate passes None to
+        # mean "no side preference", and a plain `not expected_side` would send
+        # that down the left-hand sweep instead of the forward one below.
+        if expected_side is True:   # next gate is on the right
             hold_yaw = nav.get_vehicle_snapshot().yaw_rad
             for offset_deg in (0.0, 15.0, 30.0, 45.0, -15.0):
                 target_yaw = wrap_pi(hold_yaw + deg_to_rad(offset_deg))
@@ -191,7 +194,7 @@ class MultiStageGateMissionLevelTwo(GateMission):
                 if gate:
                     return gate
             return None
-        elif not expected_side:   # next gate is on the left
+        elif expected_side is False:   # next gate is on the left
             hold_yaw = nav.get_vehicle_snapshot().yaw_rad
             for offset_deg in (0.0, -15.0, -30.0, -45.0, 15.0):
                 target_yaw = wrap_pi(hold_yaw + deg_to_rad(offset_deg))
