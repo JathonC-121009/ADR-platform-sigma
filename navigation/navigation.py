@@ -120,6 +120,9 @@ def is_valid_detection(det: Optional[GateDetection]) -> bool:
         return False
     # detection timestamp must be recent
     try:
+        # Treat non-positive timestamps (test/legacy sentinel) as valid.
+        if det.timestamp <= 0.0:
+            return True
         if (time.time() - det.timestamp) > DETECTION_MAX_AGE_S:
             return False
     except Exception:
@@ -541,6 +544,12 @@ class GateMission(Mission):
         self._debounce_required: int = 3  # consecutive frames required to accept a candidate
         self._debounce_pos_thresh_m: float = 0.2  # lateral/vertical change below this is considered same
         self._debounce_dist_improve_m: float = 0.2  # immediate accept if new detection is this much closer
+        # Commit/lock state used to freeze detection selection during critical maneuvers
+        self._committed_detection: Optional[GateDetection] = None
+        self._commit_active: bool = False
+        self._commit_expire_time: float = 0.0
+        self._commit_timeout_s: float = 8.0  # default commit timeout (seconds)
+        self._commit_emergency_improve_m: float = 1.0  # large improvement to override commit
 
     @property
     def running(self) -> bool:
@@ -571,6 +580,14 @@ class GateMission(Mission):
 
     def get_latest_detection_snapshot(self) -> Optional[GateDetection]:
         with self._detection_lock:
+            # If we have an active committed detection that has not expired, return it.
+            if self._commit_active and self._committed_detection is not None:
+                if time.time() < self._commit_expire_time:
+                    return replace(self._committed_detection)
+                # commit expired -> release it
+                self._committed_detection = None
+                self._commit_active = False
+
             if self._latest_detection is None:
                 return None
             # Like vehicle snapshots, callers get a copy instead of the shared object.
@@ -585,6 +602,28 @@ class GateMission(Mission):
             return
 
         with self._detection_lock:
+            # If we are committed to a gate for a pass/check, ignore updates that
+            # would switch to different gates unless an emergency override occurs.
+            if self._commit_active and self._committed_detection is not None:
+                # if commit expired, release and continue
+                if time.time() >= self._commit_expire_time:
+                    self._committed_detection = None
+                    self._commit_active = False
+                else:
+                    # emergency override: accept if new detection is substantially closer
+                    try:
+                        if new_det.dist + 0.0 < (self._committed_detection.dist - self._commit_emergency_improve_m):
+                            # Accept the new detection and drop the commit
+                            self._latest_detection = replace(new_det)
+                            self._committed_detection = None
+                            self._commit_active = False
+                            self._debounce_candidate = None
+                            self._debounce_count = 0
+                        # otherwise ignore this update while committed
+                    except Exception:
+                        pass
+                    return
+
             cur = self._latest_detection
 
             # If we have no current detection, accept immediately.
@@ -640,6 +679,36 @@ class GateMission(Mission):
                 self._latest_detection = replace(self._debounce_candidate)
                 self._debounce_candidate = None
                 self._debounce_count = 0
+
+    def commit_detection(self, det: GateDetection, timeout_s: Optional[float] = None) -> bool:
+        """Commit to `det` and ignore other detections for the duration of the commit.
+
+        Returns True when commit succeeded, False otherwise.
+        """
+        if det is None:
+            return False
+        if not is_valid_detection(det):
+            return False
+        # very conservative: ensure hitbox fits before committing
+        if not self.hitbox_fits_gate(det):
+            return False
+
+        with self._detection_lock:
+            self._committed_detection = replace(det)
+            self._commit_active = True
+            self._commit_expire_time = time.time() + (timeout_s if timeout_s is not None else self._commit_timeout_s)
+            # reset debounce state to avoid flips
+            self._debounce_candidate = None
+            self._debounce_count = 0
+        print(f"[*] Committed detection for pass; will ignore other detections for {self._commit_expire_time - time.time():.1f}s")
+        return True
+
+    def release_commit(self) -> None:
+        """Release any active commit immediately."""
+        with self._detection_lock:
+            self._committed_detection = None
+            self._commit_active = False
+            self._commit_expire_time = 0.0
 
     def _udp_gate_listener(self):
         """Listen for the latest vision packet and keep only the newest gate."""
@@ -817,12 +886,22 @@ class GateMission(Mission):
 
         Returns the boolean result from `move_to_target`.
         """
+        # Commit the detection for the duration of the pass to avoid the vision
+        # switching to other gates mid-pass. If commit fails (sanity checks),
+        # abort the pass.
+        committed = self.commit_detection(det)
+        if not committed:
+            print("[!] perform_pass_through: failed to commit detection, aborting pass")
+            return False
+
         target = self.build_pass_through_target(nav, det, pass_dist_m)
         try:
             nav.set_vertical_enabled(False)
             return nav.move_to_target(target, label, max_speed_m_s=max_speed_m_s)
         finally:
             nav.set_vertical_enabled(True)
+            # Always release the commit regardless of pass outcome
+            self.release_commit()
 
     def run(self, nav: NavigationController):
         raise NotImplementedError
