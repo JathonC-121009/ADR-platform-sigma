@@ -341,6 +341,18 @@ class OpenCVProcessing():
                                     self.GATE_3D_CORNERS, undistorted_corners, self.K, np.zeros(4), rvec, tvec
                                 )
 
+                                # Reprojection error check: reject poses that don't reproject close to detected corners
+                                try:
+                                    proj_pts, _ = cv2.projectPoints(self.GATE_3D_CORNERS, rvec, tvec, self.K, np.zeros(4))
+                                    proj_pts = proj_pts.reshape(-1, 2)
+                                    reproj_errs = np.linalg.norm(proj_pts - undistorted_corners, axis=1)
+                                    reproj_mean = float(np.mean(reproj_errs))
+                                    if reproj_mean > 6.0:
+                                        # poor fit -> skip this detection
+                                        continue
+                                except Exception:
+                                    continue
+
                                 cv_x, cv_y, cv_z = tvec[0][0], tvec[1][0], tvec[2][0]
                                 distance = np.linalg.norm(tvec)
 
